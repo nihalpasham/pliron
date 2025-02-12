@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["pliron-derive", "pliron-llvm"]
+members = [ "pliron-clif","pliron-derive", "pliron-llvm"]
 
 [package]
 name = "pliron"
