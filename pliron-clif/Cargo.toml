@@ -10,3 +10,5 @@ categories.workspace = true
 keywords.workspace = true
 
 [dependencies]
+pliron = { path = "../", version = "0" }
+linkme.workspace = true
