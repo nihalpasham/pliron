@@ -14,9 +14,9 @@ use pliron::derive::{def_op, derive_op_interface_impl};
 ///
 /// Operands:
 ///
-/// | operand | description |
-/// |-----|-------|
-/// | `arg` | any type |
+/// | Operand | Description |
+/// |---------|-------------|
+/// | `arg`   | any type    |
 #[def_op("clif.return")]
 #[derive_op_interface_impl(IsTerminatorInterface)]
 pub struct ReturnOp;
