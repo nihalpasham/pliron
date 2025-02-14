@@ -1,0 +1,29 @@
+{
+    "comment": "Example CLIF FnAbi",
+    "abi": {
+    "abi": FnAbi { args: [ArgAbi { 
+        layout: TyAndLayout { ty: u8, layout: Layout { size: Size(1 bytes), align: AbiAndPrefAlign { abi: Align(1 bytes), pref: Align(1 bytes)
+                        }, abi: Scalar(Initialized { value: Int(I8, false), valid_range: 0..=255
+                        }), fields: Primitive, largest_niche: None, variants: Single { index: 0
+                        }, max_repr_align: None, unadjusted_abi_align: Align(1 bytes)
+                    }
+                }, mode: Direct(ArgAttributes { regular: NoUndef, arg_ext: None, pointee_size: Size(0 bytes), pointee_align: None
+                })
+            }, ArgAbi { layout: TyAndLayout { ty: u8, layout: Layout { size: Size(1 bytes), align: AbiAndPrefAlign { abi: Align(1 bytes), pref: Align(1 bytes)
+                        }, abi: Scalar(Initialized { value: Int(I8, false), valid_range: 0..=255
+                        }), fields: Primitive, largest_niche: None, variants: Single { index: 0
+                        }, max_repr_align: None, unadjusted_abi_align: Align(1 bytes)
+                    }
+                }, mode: Direct(ArgAttributes { regular: NoUndef, arg_ext: None, pointee_size: Size(0 bytes), pointee_align: None
+                })
+            }
+        ], ret: ArgAbi { layout: TyAndLayout { ty: u8, layout: Layout { size: Size(1 bytes), align: AbiAndPrefAlign { abi: Align(1 bytes), pref: Align(1 bytes)
+                    }, abi: Scalar(Initialized { value: Int(I8, false), valid_range: 0..=255
+                    }), fields: Primitive, largest_niche: None, variants: Single { index: 0
+                    }, max_repr_align: None, unadjusted_abi_align: Align(1 bytes)
+                }
+            }, mode: Direct(ArgAttributes { regular: NoUndef, arg_ext: None, pointee_size: Size(0 bytes), pointee_align: None
+            })
+        }, c_variadic: false, fixed_count: 2, conv: Rust, can_unwind: false
+    }
+}

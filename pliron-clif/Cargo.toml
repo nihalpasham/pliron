@@ -12,3 +12,5 @@ keywords.workspace = true
 [dependencies]
 pliron = { path = "../", version = "0" }
 linkme.workspace = true
+thiserror.workspace = true
+combine.workspace = true
