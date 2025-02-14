@@ -1,0 +1,97 @@
+{
+  "comment": "An example of CLIF's FnAbi, representing the function's argument and return type layout.",
+  "args": [
+    {
+      "Arg1": {
+        "type_comment": "Type of the argument (unsigned 8-bit integer).",
+        "size_comment": "Memory size of the argument.",
+        "align_comment": "ABI and preferred alignment in bytes.",
+        "abi_comment": "ABI representation, including valid range of values.",
+        "fields_comment": "Classification as a primitive data type.",
+        "largest_niche_comment": "No special niche optimizations available.",
+        "variants_comment": "Single variant (not an enum).",
+        "max_repr_align_comment": "No specific maximum representation alignment.",
+        "unadjusted_abi_align_comment": "ABI alignment before any adjustments.",
+        "ty": "u8",
+        "layout": {
+          "size": "1 byte",
+          "align": { "abi": "1 byte", "pref": "1 byte" },
+          "abi": { "value": "Int(I8, false)", "valid_range": "0..=255" },
+          "fields": "Primitive",
+          "largest_niche": null,
+          "variants": { "index": 0 },
+          "max_repr_align": null,
+          "unadjusted_abi_align": "1 byte"
+        }
+      },
+      "mode": {
+        "regular_comment": "Argument mode (direct, no undefined values).",
+        "arg_ext_comment": "No additional argument extensions are applied.",
+        "pointee_size_comment": "Not a pointer, hence no associated size.",
+        "pointee_align_comment": "No specific alignment required for pointers.",
+        "regular": "Direct, NoUndef", 
+        "arg_ext": null,
+        "pointee_size": "0 bytes",
+        "pointee_align": null
+      }
+    },
+    {
+      "Arg2": {
+        "type_comment": "Type of the second argument (same as Arg1).",
+        "ty": "u8", 
+        "layout": {
+          "size": "1 byte", 
+          "align": { "abi": "1 byte", "pref": "1 byte" },
+          "abi": { "value": "Int(I8, false)", "valid_range": "0..=255" }, 
+          "fields": "Primitive", 
+          "largest_niche": null,
+          "variants": { "index": 0 },
+          "max_repr_align": null,
+          "unadjusted_abi_align": "1 byte"
+        }
+      },
+      "mode": {
+        "regular_comment": "Argument mode (direct, no undefined values)",
+        "arg_ext_comment": "No additional argument extensions.",
+        "pointee_size_comment": "Not a pointer, hence no associated size.",
+        "pointee_align_comment": "No specific alignment required for pointers.",
+        "regular": "Direct, NoUndef", 
+        "arg_ext": null, 
+        "pointee_size": "0 bytes",
+        "pointee_align": null 
+      }
+    }
+  ],
+  "ret": {
+    "comment": "Defines the return type layout.",
+    "layout": {
+      "type_comment": "Return type (unsigned 8-bit integer).",
+      "ty": "u8", 
+      "layout": {
+        "size": "1 byte", 
+        "align": { "abi": "1 byte", "pref": "1 byte" },
+        "abi": { "value": "Int(I8, false)", "valid_range": "0..=255" },
+        "fields": "Primitive",
+        "largest_niche": null,
+        "variants": { "index": 0 },
+        "max_repr_align": null,
+        "unadjusted_abi_align": "1 byte"
+      }
+    },
+    "mode": {
+      "comment": "Return mode (direct, no undefined values)",
+      "regular": "Direct, NoUndef",
+      "arg_ext": null,
+      "pointee_size": "0 bytes",
+      "pointee_align": null
+    }
+  },
+  "c_variadic_comment": "Indicates whether the function supports C-style variadic arguments (false means fixed arguments).",
+  "fixed_count_comment": "Specifies the number of fixed arguments (two in this case).",
+  "conv_comment": "Defines the calling convention (Rust's default ABI).",
+  "can_unwind_comment": "Indicates whether the function can unwind (false means no unwinding is allowed).",
+  "c_variadic": false, 
+  "fixed_count": 2, 
+  "conv": "Rust",
+  "can_unwind": false
+}
