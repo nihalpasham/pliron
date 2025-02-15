@@ -1,6 +1,5 @@
 //! [Op]s defined in the CLIF dialect
 
-use combine::parser::Parser;
 use pliron::derive::{def_op, derive_op_interface_impl};
 
 use pliron::{
@@ -69,7 +68,7 @@ macro_rules! new_int_bin_op_without_format {
         /// | `rhs`   | Signless integer |
         ///
         /// ### Result(s):
-        ///
+        ///{}
         /// | result | description      |
         /// |--------|------------------|
         /// | `res`  | Signless integer |
