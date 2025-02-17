@@ -1,11 +1,12 @@
 use pliron::{
     basic_block::BasicBlock,
     builtin::{
+        op_interfaces::OneRegionInterface,
         ops::FuncOp,
         types::{FunctionType, IntegerType, Signedness},
     },
     context::{Context, Ptr},
-    identifier::{Identifier, Legaliser},
+    identifier::Identifier,
     op::Op,
     operation::Operation,
     r#type::TypeObj,
@@ -116,10 +117,14 @@ fn convert_clif_type(ctx: &mut Context, ty: ClifType) -> Result<Ptr<TypeObj>> {
     }
 }
 
-fn convert_function(ctx: &mut Context, func: Function) -> Result<FuncOp> {
+fn populate_converted_pliron_entitystore(
+    ctx: &mut Context,
+    store: ConvertedPlironEntityStore,
+    func: Function,
+) {
+    let mut store = ConvertedPlironEntityStore::default();
     let entry_block = func.layout.entry_block().unwrap();
     let dfg = &func.dfg;
-    let mut store = ConversionStore::default();
     let block = convert_block(ctx, &dfg, entry_block).unwrap();
     store.entry_block = Some(block);
     for block in func.layout.blocks() {
@@ -127,9 +132,19 @@ fn convert_function(ctx: &mut Context, func: Function) -> Result<FuncOp> {
         store.bbs.push(ptr_bb);
         for inst in func.layout.block_insts(block) {
             let op = convert_clif_instruction(ctx, &dfg, inst).unwrap();
-            store.ops.push(op);
+            if op.deref(ctx).num_regions() > 0 {
+                todo!()
+            } else {
+                store.ops.push(op);
+            }
         }
     }
+}
+
+/// Convert a Cranelift [Function] to a Pliron [FuncOp], translating all Cranelift  
+/// entities (instructions, blocks, operands, types, etc.) into their Pliron equivalents  
+/// and storing them in the converted entity store.
+fn convert_function(ctx: &mut Context, func: Function) -> Result<FuncOp> {
     let func_name = func.name.to_string();
     let func_type = func.signature.clone();
     let func_params_types: Vec<_> = func_type
@@ -151,15 +166,21 @@ fn convert_function(ctx: &mut Context, func: Function) -> Result<FuncOp> {
     let pliron_func_type = FunctionType::get(ctx, func_params_types, func_return_types);
     let func_op = FuncOp::new(ctx, &Identifier::try_new(func_name)?, pliron_func_type);
 
-    todo!()
+    let mut store = ConvertedPlironEntityStore::default();
+    store.ops.push(func_op.get_operation());
+    store.regs.push(func_op.get_region(ctx));
+
+    populate_converted_pliron_entitystore(ctx, store, func);
+
+    Ok(func_op)
 }
 /// Storage for converted Pliron entities.
 #[derive(Default)]
-struct ConversionStore {
+struct ConvertedPlironEntityStore {
     /// A store for converted pliron's Operations
     ops: Vec<Ptr<Operation>>,
     /// A store for converted pliron's Regions
-    reg: Vec<Ptr<Region>>,
+    regs: Vec<Ptr<Region>>,
     /// A store for converted pliron's BasicBlocks.
     bbs: Vec<Ptr<BasicBlock>>,
     /// Entry block of the function we're processing.
@@ -185,22 +206,11 @@ mod tests {
         let functions = parse_functions(clif_code).expect("Failed to parse .clif");
 
         for func in functions {
+            let store = ConvertedPlironEntityStore::default();
             let mut ctx = Context::new();
             builtin::register(&mut ctx);
             crate::register(&mut ctx);
-            let entry_block = func.layout.entry_block().unwrap();
-            let dfg = &func.dfg;
-            let mut store = ConversionStore::default();
-            let block = convert_block(&mut ctx, &dfg, entry_block).unwrap();
-            store.entry_block = Some(block);
-            for block in func.layout.blocks() {
-                let ptr_bb = convert_block(&mut ctx, &dfg, block).unwrap();
-                store.bbs.push(ptr_bb);
-                for inst in func.layout.block_insts(block) {
-                    let op = convert_clif_instruction(&mut ctx, &dfg, inst).unwrap();
-                    store.ops.push(op);
-                }
-            }
+            populate_converted_pliron_entitystore(&mut ctx, store, func);
         }
     }
 }
