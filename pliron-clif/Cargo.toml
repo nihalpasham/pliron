@@ -14,3 +14,9 @@ pliron = { path = "../", version = "0" }
 linkme.workspace = true
 thiserror.workspace = true
 combine.workspace = true
+cranelift-codegen.workspace = true
+rustc-hash.workspace = true
+
+[dev-dependencies]
+cranelift-reader.workspace = true
+

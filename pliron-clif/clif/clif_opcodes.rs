@@ -1,3 +1,5 @@
+
+/// As on date (Feb 15th 2025), Cranelift's `Opcode` enum has 107 variants.
 pub enum Opcode {
     /// `jump block_call`. (Jump)
     Jump = 1,

@@ -2,6 +2,7 @@
 
 use pliron::derive::{def_op, derive_op_interface_impl};
 
+use pliron::parsable::Parsable;
 use pliron::{
     builtin::op_interfaces::{
         IsTerminatorInterface, OneResultInterface, SameOperandsAndResultType, SameOperandsType,
@@ -106,3 +107,9 @@ new_int_bin_op!(
     ISubOp,
     "clif.isub"
 );
+
+pub fn register(ctx: &mut Context) {
+    ReturnOp::register(ctx, ReturnOp::parser_fn);
+    IAddOp::register(ctx, IAddOp::parser_fn);
+    ISubOp::register(ctx, ISubOp::parser_fn);
+}
