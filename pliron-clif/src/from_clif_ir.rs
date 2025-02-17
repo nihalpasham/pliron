@@ -132,8 +132,13 @@ fn populate_converted_pliron_entitystore(
         store.bbs.push(ptr_bb);
         for inst in func.layout.block_insts(block) {
             let op = convert_clif_instruction(ctx, &dfg, inst).unwrap();
-            if op.deref(ctx).num_regions() > 0 {
-                todo!()
+            let num_regions = op.deref(ctx).num_regions();
+            if num_regions > 0 {
+                for idx in 0..num_regions {
+                    let region = op.deref(ctx).get_region(idx);
+                    store.regs.push(region);
+                }
+                store.ops.push(op);
             } else {
                 store.ops.push(op);
             }
@@ -144,7 +149,7 @@ fn populate_converted_pliron_entitystore(
 /// Convert a Cranelift [Function] to a Pliron [FuncOp], translating all Cranelift  
 /// entities (instructions, blocks, operands, types, etc.) into their Pliron equivalents  
 /// and storing them in the converted entity store.
-fn convert_function(ctx: &mut Context, func: Function) -> Result<FuncOp> {
+fn convert_function(ctx: &mut Context, mut store: ConvertedPlironEntityStore, func: Function) -> Result<FuncOp> {
     let func_name = func.name.to_string();
     let func_type = func.signature.clone();
     let func_params_types: Vec<_> = func_type
@@ -166,7 +171,6 @@ fn convert_function(ctx: &mut Context, func: Function) -> Result<FuncOp> {
     let pliron_func_type = FunctionType::get(ctx, func_params_types, func_return_types);
     let func_op = FuncOp::new(ctx, &Identifier::try_new(func_name)?, pliron_func_type);
 
-    let mut store = ConvertedPlironEntityStore::default();
     store.ops.push(func_op.get_operation());
     store.regs.push(func_op.get_region(ctx));
 
@@ -174,16 +178,25 @@ fn convert_function(ctx: &mut Context, func: Function) -> Result<FuncOp> {
 
     Ok(func_op)
 }
-/// Storage for converted Pliron entities.
+/// Stores converted Pliron entities during IR transformation.
+///
+/// This struct tracks various Pliron components—operations, regions, and basic blocks—ensuring 
+/// efficient lookup and preventing redundant conversions.
+///
+/// # Fields
+/// - `ops`: Pointers to converted `Operation` entities.
+/// - `regs`: Pointers to converted `Region` entities.
+/// - `bbs`: Pointers to converted `BasicBlock` entities.
+/// - `entry_block`: The entry `BasicBlock` of the function being processed, if available.
 #[derive(Default)]
 struct ConvertedPlironEntityStore {
-    /// A store for converted pliron's Operations
+    /// A store for converted Pliron `Operation` entities.
     ops: Vec<Ptr<Operation>>,
-    /// A store for converted pliron's Regions
+    /// A store for converted Pliron `Region` entities.
     regs: Vec<Ptr<Region>>,
-    /// A store for converted pliron's BasicBlocks.
+    /// A store for converted Pliron `BasicBlock` entities.
     bbs: Vec<Ptr<BasicBlock>>,
-    /// Entry block of the function we're processing.
+    /// The entry `BasicBlock` of the function being processed, if available.
     entry_block: Option<Ptr<BasicBlock>>,
 }
 
@@ -191,7 +204,7 @@ struct ConvertedPlironEntityStore {
 mod tests {
     use super::*;
     use cranelift_reader::parse_functions;
-    use pliron::builtin;
+    use pliron::{builtin, parsable::State, printable::{Printable, State as PrintableState}};
 
     #[test]
     fn test_parse_clif_add() {
@@ -210,7 +223,13 @@ mod tests {
             let mut ctx = Context::new();
             builtin::register(&mut ctx);
             crate::register(&mut ctx);
-            populate_converted_pliron_entitystore(&mut ctx, store, func);
+            let func_op = match convert_function(&mut ctx, store, func) {
+                Ok(op   ) => op,
+                Err(e) => panic!("Error: {}", e),
+            };
+            let state = PrintableState::default();
+            let disp_func = func_op.print(&ctx, &state);
+            println!("{}", disp_func);
         }
     }
 }
