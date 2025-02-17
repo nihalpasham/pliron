@@ -119,10 +119,9 @@ fn convert_clif_type(ctx: &mut Context, ty: ClifType) -> Result<Ptr<TypeObj>> {
 
 fn populate_converted_pliron_entitystore(
     ctx: &mut Context,
-    store: ConvertedPlironEntityStore,
+    mut store: ConvertedPlironEntityStore,
     func: Function,
 ) {
-    let mut store = ConvertedPlironEntityStore::default();
     let entry_block = func.layout.entry_block().unwrap();
     let dfg = &func.dfg;
     let block = convert_block(ctx, &dfg, entry_block).unwrap();
@@ -150,7 +149,7 @@ fn populate_converted_pliron_entitystore(
 /// entities (instructions, blocks, operands, types, etc.) into their Pliron equivalents  
 /// and storing them in the converted entity store.
 fn convert_function(ctx: &mut Context, mut store: ConvertedPlironEntityStore, func: Function) -> Result<FuncOp> {
-    let func_name = func.name.to_string();
+    let func_name = func.name.to_string().split_off(1);
     let func_type = func.signature.clone();
     let func_params_types: Vec<_> = func_type
         .params
@@ -204,7 +203,7 @@ struct ConvertedPlironEntityStore {
 mod tests {
     use super::*;
     use cranelift_reader::parse_functions;
-    use pliron::{builtin, parsable::State, printable::{Printable, State as PrintableState}};
+    use pliron::{builtin, printable::{Printable, State as PrintableState}};
 
     #[test]
     fn test_parse_clif_add() {
@@ -230,6 +229,7 @@ mod tests {
             let state = PrintableState::default();
             let disp_func = func_op.print(&ctx, &state);
             println!("{}", disp_func);
+
         }
     }
 }
