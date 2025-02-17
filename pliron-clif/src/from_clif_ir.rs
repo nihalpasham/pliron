@@ -1,17 +1,21 @@
 use pliron::{
     basic_block::BasicBlock,
-    builtin::types::{IntegerType, Signedness},
+    builtin::{
+        ops::FuncOp,
+        types::{FunctionType, IntegerType, Signedness},
+    },
     context::{Context, Ptr},
-    identifier::Identifier,
+    identifier::{Identifier, Legaliser},
     op::Op,
     operation::Operation,
     r#type::TypeObj,
+    region::Region,
     result::Result,
     value::Value as PlironValue,
 };
 
 use cranelift_codegen::ir::{
-    types::Type as ClifType, Block as ClifBasicBlock, DataFlowGraph, Inst, Opcode,
+    types::Type as ClifType, Block as ClifBasicBlock, DataFlowGraph, Function, Inst, Opcode,
     Value as ClifValue, ValueDef,
 };
 
@@ -20,6 +24,7 @@ use crate::{
     ops::{IAddOp, ReturnOp},
 };
 
+/// Convert a [ClifValue] to pliron's [PlironValue].
 fn convert_operands(
     ctx: &mut Context,
     dfg: &DataFlowGraph,
@@ -50,6 +55,7 @@ fn convert_operands(
     Ok(pliron_operands)
 }
 
+/// Convert a cranelift [Inst] to pliron's [Ptr<Operation>].
 fn convert_clif_instruction(
     ctx: &mut Context,
     dfg: &DataFlowGraph,
@@ -99,6 +105,7 @@ fn convert_block(
     Ok(BasicBlock::new(ctx, Some(label), arg_types))
 }
 
+/// Convert [ClifType] to pliron's [TypeObj].
 fn convert_clif_type(ctx: &mut Context, ty: ClifType) -> Result<Ptr<TypeObj>> {
     match ty.to_string().as_str() {
         "i32" => {
@@ -107,6 +114,56 @@ fn convert_clif_type(ctx: &mut Context, ty: ClifType) -> Result<Ptr<TypeObj>> {
         }
         _ => unimplemented!(),
     }
+}
+
+fn convert_function(ctx: &mut Context, func: Function) -> Result<FuncOp> {
+    let entry_block = func.layout.entry_block().unwrap();
+    let dfg = &func.dfg;
+    let mut store = ConversionStore::default();
+    let block = convert_block(ctx, &dfg, entry_block).unwrap();
+    store.entry_block = Some(block);
+    for block in func.layout.blocks() {
+        let ptr_bb = convert_block(ctx, &dfg, block).unwrap();
+        store.bbs.push(ptr_bb);
+        for inst in func.layout.block_insts(block) {
+            let op = convert_clif_instruction(ctx, &dfg, inst).unwrap();
+            store.ops.push(op);
+        }
+    }
+    let func_name = func.name.to_string();
+    let func_type = func.signature.clone();
+    let func_params_types: Vec<_> = func_type
+        .params
+        .iter()
+        .map(|param| {
+            convert_clif_type(ctx, param.value_type)
+                .expect("Failed to convert Clif Function Parameter Type")
+        })
+        .collect();
+    let func_return_types: Vec<_> = func_type
+        .returns
+        .iter()
+        .map(|ret| {
+            convert_clif_type(ctx, ret.value_type)
+                .expect("Failed to convert Clif Function Return Type")
+        })
+        .collect();
+    let pliron_func_type = FunctionType::get(ctx, func_params_types, func_return_types);
+    let func_op = FuncOp::new(ctx, &Identifier::try_new(func_name)?, pliron_func_type);
+
+    todo!()
+}
+/// Storage for converted Pliron entities.
+#[derive(Default)]
+struct ConversionStore {
+    /// A store for converted pliron's Operations
+    ops: Vec<Ptr<Operation>>,
+    /// A store for converted pliron's Regions
+    reg: Vec<Ptr<Region>>,
+    /// A store for converted pliron's BasicBlocks.
+    bbs: Vec<Ptr<BasicBlock>>,
+    /// Entry block of the function we're processing.
+    entry_block: Option<Ptr<BasicBlock>>,
 }
 
 #[cfg(test)]
@@ -133,9 +190,16 @@ mod tests {
             crate::register(&mut ctx);
             let entry_block = func.layout.entry_block().unwrap();
             let dfg = &func.dfg;
+            let mut store = ConversionStore::default();
             let block = convert_block(&mut ctx, &dfg, entry_block).unwrap();
-            for inst in func.layout.block_insts(entry_block) {
-                let op = convert_clif_instruction(&mut ctx, &dfg, inst).unwrap();
+            store.entry_block = Some(block);
+            for block in func.layout.blocks() {
+                let ptr_bb = convert_block(&mut ctx, &dfg, block).unwrap();
+                store.bbs.push(ptr_bb);
+                for inst in func.layout.block_insts(block) {
+                    let op = convert_clif_instruction(&mut ctx, &dfg, inst).unwrap();
+                    store.ops.push(op);
+                }
             }
         }
     }

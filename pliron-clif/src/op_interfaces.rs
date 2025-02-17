@@ -1,7 +1,6 @@
 use pliron::derive::op_interface;
 use thiserror::Error;
 
-// use super::attributes::IntegerOverflowFlagsAttr;
 use pliron::{
     builtin::{
         op_interfaces::{OneResultInterface, SameOperandsAndResultType},
