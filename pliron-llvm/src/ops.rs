@@ -637,8 +637,8 @@ impl Parsable for CondBrOp {
     }
 }
 
-impl_verify_succ!(CondBrOp);
 
+impl_verify_succ!(CondBrOp);
 #[op_interface_impl]
 impl BranchOpInterface for CondBrOp {
     fn successor_operands(&self, ctx: &Context, succ_idx: usize) -> Vec<Value> {

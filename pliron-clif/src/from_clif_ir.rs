@@ -122,7 +122,7 @@ fn convert_clif_type(ctx: &mut Context, ty: ClifType) -> Result<Ptr<TypeObj>> {
 /// and storing them in the converted entity store.
 fn convert_function(
     ctx: &mut Context,
-    store: &mut ConvertedPlironEntityStore,
+    store: &mut ConversionStore,
     func: Function,
 ) -> Result<FuncOp> {
     let func_name = func.name.to_string().split_off(1);
@@ -149,16 +149,12 @@ fn convert_function(
     store.ops.push(func_op.get_operation());
     store.regs.push(func_op.get_region(ctx));
 
-    populate_converted_pliron_entitystore(ctx, store, func);
+    populate_conversion_store(ctx, store, func);
 
     Ok(func_op)
 }
 
-fn populate_converted_pliron_entitystore(
-    ctx: &mut Context,
-    store: &mut ConvertedPlironEntityStore,
-    func: Function,
-) {
+fn populate_conversion_store(ctx: &mut Context, store: &mut ConversionStore, func: Function) {
     let entry_block = func.layout.entry_block().unwrap();
     let dfg = &func.dfg;
     let block = convert_block(ctx, &dfg, entry_block).unwrap();
@@ -193,7 +189,7 @@ fn populate_converted_pliron_entitystore(
 /// - `bbs`: Pointers to converted `BasicBlock` entities.
 /// - `entry_block`: The entry `BasicBlock` of the function being processed, if available.
 #[derive(Default)]
-struct ConvertedPlironEntityStore {
+struct ConversionStore {
     /// A store for converted Pliron `Operation` entities.
     ops: Vec<Ptr<Operation>>,
     /// A store for converted Pliron `Region` entities.
@@ -208,10 +204,7 @@ struct ConvertedPlironEntityStore {
 mod tests {
     use super::*;
     use cranelift_reader::parse_functions;
-    use pliron::{
-        builtin,
-        printable::{Printable, State as PrintableState},
-    };
+    use pliron::{builtin, printable::Printable};
 
     #[test]
     fn test_convert_clif_add_to_pliron() {
@@ -226,7 +219,7 @@ mod tests {
         let functions = parse_functions(clif_code).expect("Failed to parse .clif");
 
         for func in functions {
-            let mut store = ConvertedPlironEntityStore::default();
+            let mut store = ConversionStore::default();
             let mut ctx = Context::new();
             builtin::register(&mut ctx);
             crate::register(&mut ctx);
@@ -234,20 +227,19 @@ mod tests {
                 Ok(op) => op,
                 Err(e) => panic!("Error: {}", e),
             };
-            let state = PrintableState::default();
-            let print_func = func_op.print(&ctx, &state);
+            let print_func = func_op.disp(&ctx);
             assert_eq!(
                 "builtin.func @add: builtin.function <(builtin.int <si32>, builtin.int <si32>)->(builtin.int <si32>)> \n{\n  ^entry_block_1v1(block_1v1_arg0:builtin.int <si32>,block_1v1_arg1:builtin.int <si32>):\n    \n}",
                 format!("{}", print_func) 
             );
             for op in store.ops.iter() {
                 let op_ref = (*op).deref(&ctx);
-                let print_op = op_ref.print(&ctx, &state);
+                let print_op = op_ref.disp(&ctx);
                 println!("{}", format!("{}", print_op))
             }
             for bb in store.bbs.iter() {
                 let bb_ref = (*bb).deref(&ctx);
-                let print_bb = bb_ref.print(&ctx, &state);
+                let print_bb = bb_ref.disp(&ctx);
                 println!("{}", format!("{}", print_bb))
             }
         }
