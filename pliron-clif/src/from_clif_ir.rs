@@ -72,11 +72,13 @@ fn convert_clif_instruction(
             return Ok(op);
         }
         Opcode::Return => match inst_args.len() {
+            // No return values
             0 => {
                 let return_op = ReturnOp::new(ctx, None);
                 let op = return_op.get_operation();
                 return Ok(op);
             }
+            // a single return value
             1 => {
                 let operands = convert_operands(ctx, dfg, &inst_args)?;
                 let return_op = ReturnOp::new(ctx, Some(operands[0]));
@@ -125,6 +127,47 @@ fn convert_function(
     store: &mut ConversionStore,
     func: Function,
 ) -> Result<FuncOp> {
+    // does the clif-pliron conversion and links relevant fn (components or) entities. 
+    // Todo: this impl does cycle through `Ops` with nested regions yet.
+    fn convert_and_link(ctx: &mut Context, store: &mut ConversionStore, func: Function) {
+        let dfg = &func.dfg;
+        for (idx, block) in func.layout.blocks().enumerate() {
+            let bb = convert_block(ctx, &dfg, block).unwrap();
+            match idx {
+                0 => store.bbs.push(bb), // the entry block should already be linked, just push to store.
+                _ => match store.bbs.get(idx) {
+                    Some(prev_bb) => {
+                        bb.insert_after(ctx, *prev_bb);
+                        store.bbs.push(bb);
+                    }
+                    None => {}
+                },
+            }
+            // A Clif layout (via Layout type) contains an RPO ordered list of instructions within a block, which we
+            // can simply iterate over.
+            for (idx, inst) in func.layout.block_insts(block).enumerate() {
+                let op = convert_clif_instruction(ctx, &dfg, inst).unwrap();
+                match idx {
+                    0 => {
+                        let container = store
+                            .entry_block
+                            .expect("Failed to retrieve function EntryBlock");
+                        op.insert_at_front(container, ctx);
+                        store.ops.push(op);
+                        // println!("idx: {}, op: {}", idx, store.ops.get(idx).unwrap().deref(ctx).disp(ctx));
+                    }
+                    _ => match store.ops.get(idx) {
+                        Some(prev_op) => {
+                            op.insert_after(ctx, *prev_op);
+                            store.ops.push(op);
+                        }
+                        None => {}
+                    },
+                }
+            }
+        }
+    }
+
     let func_name = func.name.to_string().split_off(1);
     let func_type = func.signature.clone();
     let func_params_types: Vec<_> = func_type
@@ -145,37 +188,13 @@ fn convert_function(
         .collect();
     let pliron_func_type = FunctionType::get(ctx, func_params_types, func_return_types);
     let func_op = FuncOp::new(ctx, &Identifier::try_new(func_name)?, pliron_func_type);
-
-    store.ops.push(func_op.get_operation());
+    store.entry_block = Some(func_op.get_entry_block(ctx));
     store.regs.push(func_op.get_region(ctx));
+    store.ops.push(func_op.get_operation());
 
-    populate_conversion_store(ctx, store, func);
+    convert_and_link(ctx, store, func);
 
     Ok(func_op)
-}
-
-fn populate_conversion_store(ctx: &mut Context, store: &mut ConversionStore, func: Function) {
-    let entry_block = func.layout.entry_block().unwrap();
-    let dfg = &func.dfg;
-    let block = convert_block(ctx, &dfg, entry_block).unwrap();
-    store.entry_block = Some(block);
-    for block in func.layout.blocks() {
-        let ptr_bb = convert_block(ctx, &dfg, block).unwrap();
-        store.bbs.push(ptr_bb);
-        for inst in func.layout.block_insts(block) {
-            let op = convert_clif_instruction(ctx, &dfg, inst).unwrap();
-            let num_regions = op.deref(ctx).num_regions();
-            if num_regions > 0 {
-                for idx in 0..num_regions {
-                    let region = op.deref(ctx).get_region(idx);
-                    store.regs.push(region);
-                }
-                store.ops.push(op);
-            } else {
-                store.ops.push(op);
-            }
-        }
-    }
 }
 
 /// Stores converted Pliron entities during IR transformation.
@@ -207,7 +226,7 @@ mod tests {
     use pliron::{builtin, printable::Printable};
 
     #[test]
-    fn test_convert_clif_add_to_pliron() {
+    fn test_convert_and_print_clif_add_to_pliron() {
         let clif_code = r#"
         function %add(i32, i32) -> i32 apple_aarch64 {
             block0(v0: i32, v1: i32):
@@ -228,20 +247,16 @@ mod tests {
                 Err(e) => panic!("Error: {}", e),
             };
             let print_func = func_op.disp(&ctx);
+            println!("{}", print_func);
             assert_eq!(
-                "builtin.func @add: builtin.function <(builtin.int <si32>, builtin.int <si32>)->(builtin.int <si32>)> \n{\n  ^entry_block_1v1(block_1v1_arg0:builtin.int <si32>,block_1v1_arg1:builtin.int <si32>):\n    \n}",
-                format!("{}", print_func) 
+                "builtin.func @add: builtin.function <(builtin.int <si32>, builtin.int <si32>)->(builtin.int <si32>)> 
+{
+  ^entry_block_1v1(block_1v1_arg0:builtin.int <si32>,block_1v1_arg1:builtin.int <si32>):
+    op_2v1_res0 = clif.iadd block_3v1_arg0,block_4v1_arg1:builtin.int <si32>;
+    clif.return (op_3v1_res0) [] []: <(builtin.int <si32>) -> ()>
+}",
+                format!("{}", print_func)
             );
-            for op in store.ops.iter() {
-                let op_ref = (*op).deref(&ctx);
-                let print_op = op_ref.disp(&ctx);
-                println!("{}", format!("{}", print_op))
-            }
-            for bb in store.bbs.iter() {
-                let bb_ref = (*bb).deref(&ctx);
-                let print_bb = bb_ref.disp(&ctx);
-                println!("{}", format!("{}", print_bb))
-            }
         }
     }
 }
