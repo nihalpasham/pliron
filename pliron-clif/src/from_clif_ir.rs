@@ -133,6 +133,7 @@ fn convert_function(
         let dfg = &func.dfg;
         for (idx, block) in func.layout.blocks().enumerate() {
             let bb = convert_block(ctx, &dfg, block).unwrap();
+            println!("block");
             match idx {
                 0 => store.bbs.push(bb), // the entry block should already be linked, just push to store.
                 _ => match store.bbs.get(idx - 1) {
