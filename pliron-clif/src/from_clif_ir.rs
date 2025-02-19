@@ -127,15 +127,15 @@ fn convert_function(
     store: &mut ConversionStore,
     func: Function,
 ) -> Result<FuncOp> {
-    // does the clif-pliron conversion and links relevant fn (components or) entities. 
-    // Todo: this impl does cycle through `Ops` with nested regions yet.
+    // Performs the CLIF-to-Pliron conversion and links relevant components or entities within a function.
+    // TODO: This implementation does not yet handle `Ops` with nested regions.
     fn convert_and_link(ctx: &mut Context, store: &mut ConversionStore, func: Function) {
         let dfg = &func.dfg;
         for (idx, block) in func.layout.blocks().enumerate() {
             let bb = convert_block(ctx, &dfg, block).unwrap();
             match idx {
                 0 => store.bbs.push(bb), // the entry block should already be linked, just push to store.
-                _ => match store.bbs.get(idx) {
+                _ => match store.bbs.get(idx - 1) {
                     Some(prev_bb) => {
                         bb.insert_after(ctx, *prev_bb);
                         store.bbs.push(bb);
