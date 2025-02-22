@@ -26,7 +26,7 @@ use crate::{
     ops::{IAddOp, ReturnOp},
 };
 
-/// Converts a slice of [ClifValue] to Pliron's [PlironValue].
+/// Converts a slice of [ClifValue]s to Pliron's [PlironValue]s.
 ///
 /// This function processes each operand, determining if it is defined by an instruction or
 /// a block parameter, and converts it into the corresponding `PlironValue`.
@@ -154,7 +154,7 @@ fn convert_block(
     if let Some(bb) = cctx.bbs.get(&block) {
         return Ok(*bb);
     };
-    
+
     // Create a new Pliron `BasicBlock` with a label and argument types
     let label = Identifier::try_new(format!("{}", block))?;
     let block_params = dfg.block_params(block);
