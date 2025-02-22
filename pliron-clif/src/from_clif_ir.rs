@@ -19,31 +19,48 @@ use cranelift_codegen::ir::{
     types::Type as ClifType, Block as ClifBasicBlock, DataFlowGraph, Function, Inst, Opcode,
     Value as ClifValue, ValueDef,
 };
+use rustc_hash::FxHashMap;
 
 use crate::{
     op_interfaces::BinArithOp,
     ops::{IAddOp, ReturnOp},
 };
 
-/// Convert a [ClifValue] to pliron's [PlironValue].
+/// Converts a slice of [ClifValue] to Pliron's [PlironValue].
+///
+/// This function processes each operand, determining if it is defined by an instruction or
+/// a block parameter, and converts it into the corresponding `PlironValue`.
+///
+/// # Arguments
+/// - `ctx`: The Pliron context for creating IR entities.
+/// - `dfg`: The data flow graph containing the original operand definitions.
+/// - `cctx`: The conversion context for caching converted entities.
+/// - `operands`: The slice of `ClifValue` to convert.
+///
+/// # Returns
+/// A `Result` containing a vector of converted `PlironValue` or an error if conversion fails.
+///
+/// # Panics
+/// Panics if a `Union` value definition is encountered, as it is not yet implemented.
 fn convert_operands(
     ctx: &mut Context,
     dfg: &DataFlowGraph,
+    cctx: &mut ConversionCtx,
     operands: &[ClifValue],
 ) -> Result<Vec<PlironValue>> {
-    let mut pliron_operands = vec![];
+    let mut pliron_operands = Vec::with_capacity(operands.len());
     for operand in operands {
-        let value_def = dfg.value_def(*operand);
-        match value_def {
-            // Is this a value defined by an instruction?
+        let operand_def = dfg.value_def(*operand);
+        match operand_def {
+            // Is this a value defined by an instruction? If so, convert instruction result
             ValueDef::Result(inst, idx) => {
-                let op = convert_clif_instruction(ctx, dfg, inst)?;
+                let op = convert_clif_instruction(ctx, dfg, cctx, inst)?;
                 let pliron_value = PlironValue::OpResult { op, res_idx: idx };
                 pliron_operands.push(pliron_value);
             }
-            // Is this value a BasicBlock parameter?
+            // Is this value a BasicBlock parameter? If so, convert block parameter
             ValueDef::Param(block, idx) => {
-                let block = convert_block(ctx, dfg, block)?;
+                let block = convert_block(ctx, dfg, cctx, block)?;
                 let pliron_value = PlironValue::BlockArgument {
                     block,
                     arg_idx: idx,
@@ -56,17 +73,39 @@ fn convert_operands(
     Ok(pliron_operands)
 }
 
-/// Convert a cranelift [Inst] to pliron's [Ptr<Operation>].
+/// Converts a Cranelift [Inst] to Pliron's [Ptr<Operation>].
+///
+/// This function checks if the instruction has already been converted (using `cctx` for caching).
+/// If not, it converts the instruction based on its opcode (like `Iadd` and `Return`).
+///
+/// # Arguments
+/// - `ctx`: The Pliron context for creating IR entities.
+/// - `dfg`: The data flow graph containing the original instruction's information.
+/// - `cctx`: The conversion context for caching converted entities.
+/// - `inst`: The Cranelift `Inst` to convert.
+///
+/// # Returns
+/// A `Result` containing the converted `Operation` or an error if conversion fails.
+///
+/// # Panics
+/// Panics if the opcode is not yet implemented
 fn convert_clif_instruction(
     ctx: &mut Context,
     dfg: &DataFlowGraph,
+    cctx: &mut ConversionCtx,
     inst: Inst,
 ) -> Result<Ptr<Operation>> {
+    // Check if the instruction has already been converted
+    if let Some(op) = cctx.ops.get(&inst) {
+        return Ok(*op);
+    };
+
+    // Convert the instruction based on its opcode
     let clif_opcode = dfg.insts[inst].opcode();
     let inst_args = dfg.inst_args(inst);
     match clif_opcode {
         Opcode::Iadd => {
-            let operands = convert_operands(ctx, dfg, &inst_args)?;
+            let operands = convert_operands(ctx, dfg, cctx, &inst_args)?;
             let iadd_op = IAddOp::new(ctx, operands[0], operands[1]);
             let op = iadd_op.get_operation();
             return Ok(op);
@@ -80,102 +119,149 @@ fn convert_clif_instruction(
             }
             // a single return value
             1 => {
-                let operands = convert_operands(ctx, dfg, &inst_args)?;
+                let operands = convert_operands(ctx, dfg, cctx, &inst_args)?;
                 let return_op = ReturnOp::new(ctx, Some(operands[0]));
                 let op = return_op.get_operation();
                 return Ok(op);
             }
-            _ => unimplemented!(),
+            _ => unimplemented!("Multiple return values are not supported"),
         },
-        _ => unimplemented!(),
+        _ => unimplemented!("Opcode {} is not implemented", clif_opcode),
     }
 }
 
-/// Convert [ClifBasicBlock] to pliron's [BasicBlock].
+/// Converts a [ClifBasicBlock] to Pliron's [BasicBlock].
+///
+/// This function checks if the block has already been converted (using `cctx` for caching).
+/// If not, it creates a new `BasicBlock` in Pliron's IR, deriving its label and argument types
+/// from the provided `ClifBasicBlock`.
+///
+/// # Arguments
+/// - `ctx`: The Pliron context for creating IR entities.
+/// - `dfg`: The data flow graph containing the original block's information.
+/// - `cctx`: The conversion context for caching converted entities.
+/// - `block`: The `ClifBasicBlock` to convert.
+///
+/// # Returns
+/// A `Result` containing the converted `BasicBlock` or an error if conversion fails.
 fn convert_block(
     ctx: &mut Context,
     dfg: &DataFlowGraph,
+    cctx: &mut ConversionCtx,
     block: ClifBasicBlock,
 ) -> Result<Ptr<BasicBlock>> {
+    // Check if the block has already been converted
+    if let Some(bb) = cctx.bbs.get(&block) {
+        return Ok(*bb);
+    };
+    
+    // Create a new Pliron `BasicBlock` with a label and argument types
     let label = Identifier::try_new(format!("{}", block))?;
     let block_params = dfg.block_params(block);
     let mut arg_types = vec![];
     for param in block_params {
         let param_type = dfg.value_type(*param);
-        let pliron_type = convert_clif_type(ctx, param_type)?;
+        let pliron_type = convert_type(ctx, param_type)?;
         arg_types.push(pliron_type);
     }
-    Ok(BasicBlock::new(ctx, Some(label), arg_types))
+
+    let pliron_block = BasicBlock::new(ctx, Some(label), arg_types);
+    Ok(pliron_block)
 }
 
-/// Convert [ClifType] to pliron's [TypeObj].
-fn convert_clif_type(ctx: &mut Context, ty: ClifType) -> Result<Ptr<TypeObj>> {
+/// Converts a [ClifType] to Pliron's [TypeObj].
+///
+/// This function maps Cranelift types to their corresponding Pliron types. Currently, only `i32`
+/// is supported.
+///
+/// # Arguments
+/// - `ctx`: The Pliron context for creating IR entities.
+/// - `ty`: The `ClifType` to convert.
+///
+/// # Returns
+/// A `Result` containing the converted `TypeObj` or an error if conversion fails.
+///
+/// # Panics
+/// Panics if the provided type is not yet implemented.
+fn convert_type(ctx: &mut Context, ty: ClifType) -> Result<Ptr<TypeObj>> {
     match ty.to_string().as_str() {
         "i32" => {
             let pliron_int_type_ptr = IntegerType::get(ctx, 32, Signedness::Signed);
             return Ok(pliron_int_type_ptr.to_ptr());
         }
-        _ => unimplemented!(),
+        _ => unimplemented!("Type {:?} is not implemented", ty),
     }
 }
 
-/// Convert a Cranelift [Function] to a Pliron [FuncOp], translating all Cranelift  
-/// entities (instructions, blocks, operands, types, etc.) into their Pliron equivalents  
-/// and storing them in the converted entity store.
-fn convert_function(
-    ctx: &mut Context,
-    store: &mut ConversionStore,
-    func: Function,
-) -> Result<FuncOp> {
-    // Performs the CLIF-to-Pliron conversion and links relevant components or entities within a function.
-    // TODO: This implementation does not yet handle `Ops` with nested regions.
-    fn convert_and_link(ctx: &mut Context, store: &mut ConversionStore, func: Function) {
+/// Converts a Cranelift [Function] to a Pliron [FuncOp].
+///
+/// This function translates all Cranelift entities (instructions, blocks, operands, types, etc.)
+/// into their Pliron equivalents and stores them in the conversion context (`cctx`).
+///
+/// # Arguments
+/// - `ctx`: The Pliron context for creating IR entities.
+/// - `cctx`: The conversion context for caching converted entities.
+/// - `func`: The Cranelift `Function` to convert.
+///
+/// # Returns
+/// A `Result` containing the converted `FuncOp` or an error if conversion fails.
+///
+/// # Panics
+/// Panics if the function's entry block or types cannot be converted.
+fn convert_function(ctx: &mut Context, cctx: &mut ConversionCtx, func: Function) -> Result<FuncOp> {
+    // Helper function to convert and link blocks and instructions within the function.
+    fn convert_and_link(ctx: &mut Context, cctx: &mut ConversionCtx, func: Function) {
         let dfg = &func.dfg;
+        let mut prev_bb = match cctx.entry_block {
+            Some(entry) => entry,
+            None => return,
+        };
         for (idx, block) in func.layout.blocks().enumerate() {
-            let bb = convert_block(ctx, &dfg, block).unwrap();
-            println!("block");
+            let bb = convert_block(ctx, &dfg, cctx, block).unwrap();
             match idx {
-                0 => store.bbs.push(bb), // the entry block should already be linked, just push to store.
-                _ => match store.bbs.get(idx - 1) {
-                    Some(prev_bb) => {
-                        bb.insert_after(ctx, *prev_bb);
-                        store.bbs.push(bb);
-                    }
-                    None => {}
-                },
+                0 => {
+                    // the entry block should already be linked, just insert into context.
+                    cctx.bbs.insert(block, bb);
+                }
+                _ => {
+                    bb.insert_after(ctx, prev_bb);
+                    cctx.bbs.insert(block, bb);
+                    prev_bb = bb;
+                }
             }
             // A Clif layout (via Layout type) contains an RPO ordered list of instructions within a block, which we
             // can simply iterate over.
+            let mut prev_inst = None;
             for (idx, inst) in func.layout.block_insts(block).enumerate() {
-                let op = convert_clif_instruction(ctx, &dfg, inst).unwrap();
+                let op = convert_clif_instruction(ctx, &dfg, cctx, inst).unwrap();
                 match idx {
                     0 => {
-                        let container = store
-                            .entry_block
-                            .expect("Failed to retrieve function EntryBlock");
-                        op.insert_at_front(container, ctx);
-                        store.ops.push(op);
-                        // println!("idx: {}, op: {}", idx, store.ops.get(idx).unwrap().deref(ctx).disp(ctx));
+                        op.insert_at_front(bb, ctx);
+                        cctx.ops.insert(inst, op);
+                        prev_inst = Some(inst);
                     }
-                    _ => match store.ops.get(idx) {
-                        Some(prev_op) => {
+                    _ => match prev_inst {
+                        Some(inst) => {
+                            let prev_op = cctx.ops.get(&inst).unwrap();
                             op.insert_after(ctx, *prev_op);
-                            store.ops.push(op);
+                            cctx.ops.insert(inst, op);
+                            prev_inst = Some(inst);
                         }
-                        None => {}
+                        None => todo!(),
                     },
                 }
             }
         }
     }
 
+    // Convert function signature (name, params, return types)
     let func_name = func.name.to_string().split_off(1);
     let func_type = func.signature.clone();
     let func_params_types: Vec<_> = func_type
         .params
         .iter()
         .map(|param| {
-            convert_clif_type(ctx, param.value_type)
+            convert_type(ctx, param.value_type)
                 .expect("Failed to convert Clif Function Parameter Type")
         })
         .collect();
@@ -183,41 +269,49 @@ fn convert_function(
         .returns
         .iter()
         .map(|ret| {
-            convert_clif_type(ctx, ret.value_type)
-                .expect("Failed to convert Clif Function Return Type")
+            convert_type(ctx, ret.value_type).expect("Failed to convert Clif Function Return Type")
         })
         .collect();
     let pliron_func_type = FunctionType::get(ctx, func_params_types, func_return_types);
-    let func_op = FuncOp::new(ctx, &Identifier::try_new(func_name)?, pliron_func_type);
-    store.entry_block = Some(func_op.get_entry_block(ctx));
-    store.regs.push(func_op.get_region(ctx));
-    store.ops.push(func_op.get_operation());
 
-    convert_and_link(ctx, store, func);
+    // Create the Pliron `FuncOp`
+    let func_op = FuncOp::new(ctx, &Identifier::try_new(func_name)?, pliron_func_type);
+
+    // Update the conversion context
+    let pliron_entry_blk = func_op.get_entry_block(ctx);
+    if let Some(blk) = func.layout.entry_block() {
+        cctx.bbs.insert(blk, pliron_entry_blk);
+    } else {
+        println!("Function has no entry block");
+    }
+    cctx.entry_block = Some(pliron_entry_blk);
+    cctx.regs.push(func_op.get_region(ctx));
+    cctx.func_op = Some(func_op.get_operation());
+
+    // Convert and link all blocks and instructions
+    convert_and_link(ctx, cctx, func);
 
     Ok(func_op)
 }
 
-/// Stores converted Pliron entities during IR transformation.
+/// Tracks converted Pliron entities during IR transformation.
 ///
-/// This struct tracks various Pliron components—operations, regions, and basic blocks—ensuring
-/// efficient lookup and preventing redundant conversions.
+/// This struct ensures efficient lookup and prevents redundant conversions of operations,
+/// regions, and basic blocks during the transformation process.
 ///
 /// # Fields
-/// - `ops`: Pointers to converted `Operation` entities.
-/// - `regs`: Pointers to converted `Region` entities.
-/// - `bbs`: Pointers to converted `BasicBlock` entities.
-/// - `entry_block`: The entry `BasicBlock` of the function being processed, if available.
+/// - `ops`: Maps original instructions to their converted `Operation` entities.
+/// - `regs`: Stores pointers to converted `Region` entities.
+/// - `bbs`: Maps `ClifBasicBlock`s to their corresponding Pliron `BasicBlock`s.
+/// - `entry_block`: The entry `BasicBlock` of the function being processed, if any.
+/// - `func_op`: The root `Operation` representing the function being processed, if any.
 #[derive(Default)]
-struct ConversionStore {
-    /// A store for converted Pliron `Operation` entities.
-    ops: Vec<Ptr<Operation>>,
-    /// A store for converted Pliron `Region` entities.
+struct ConversionCtx {
+    ops: FxHashMap<Inst, Ptr<Operation>>,
     regs: Vec<Ptr<Region>>,
-    /// A store for converted Pliron `BasicBlock` entities.
-    bbs: Vec<Ptr<BasicBlock>>,
-    /// The entry `BasicBlock` of the function being processed, if available.
+    bbs: FxHashMap<ClifBasicBlock, Ptr<BasicBlock>>,
     entry_block: Option<Ptr<BasicBlock>>,
+    func_op: Option<Ptr<Operation>>,
 }
 
 #[cfg(test)]
@@ -239,25 +333,25 @@ mod tests {
         let functions = parse_functions(clif_code).expect("Failed to parse .clif");
 
         for func in functions {
-            let mut store = ConversionStore::default();
+            let mut cctx = ConversionCtx::default();
             let mut ctx = Context::new();
             builtin::register(&mut ctx);
             crate::register(&mut ctx);
-            let func_op = match convert_function(&mut ctx, &mut store, func) {
+            let func_op = match convert_function(&mut ctx, &mut cctx, func) {
                 Ok(op) => op,
                 Err(e) => panic!("Error: {}", e),
             };
             let print_func = func_op.disp(&ctx);
             println!("{}", print_func);
             assert_eq!(
-                "builtin.func @add: builtin.function <(builtin.int <si32>, builtin.int <si32>)->(builtin.int <si32>)> 
+                            "builtin.func @add: builtin.function <(builtin.int <si32>, builtin.int <si32>)->(builtin.int <si32>)> 
 {
   ^entry_block_1v1(block_1v1_arg0:builtin.int <si32>,block_1v1_arg1:builtin.int <si32>):
-    op_2v1_res0 = clif.iadd block_3v1_arg0,block_4v1_arg1:builtin.int <si32>;
-    clif.return (op_3v1_res0) [] []: <(builtin.int <si32>) -> ()>
+    op_2v1_res0 = clif.iadd block_1v1_arg0,block_1v1_arg1:builtin.int <si32>;
+    clif.return (op_2v1_res0) [] []: <(builtin.int <si32>) -> ()>
 }",
-                format!("{}", print_func)
-            );
+                            format!("{}", print_func)
+                        );
         }
     }
 }
