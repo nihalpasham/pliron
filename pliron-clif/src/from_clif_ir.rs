@@ -54,7 +54,7 @@ fn convert_operands(
         match operand_def {
             // Is this a value defined by an instruction? If so, convert instruction result
             ValueDef::Result(inst, idx) => {
-                let op = convert_clif_instruction(ctx, dfg, cctx, inst)?;
+                let op = convert_instruction(ctx, dfg, cctx, inst)?;
                 let pliron_value = PlironValue::OpResult { op, res_idx: idx };
                 pliron_operands.push(pliron_value);
             }
@@ -89,7 +89,7 @@ fn convert_operands(
 ///
 /// # Panics
 /// Panics if the opcode is not yet implemented
-fn convert_clif_instruction(
+fn convert_instruction(
     ctx: &mut Context,
     dfg: &DataFlowGraph,
     cctx: &mut ConversionCtx,
@@ -229,11 +229,11 @@ fn convert_function(ctx: &mut Context, cctx: &mut ConversionCtx, func: Function)
                     prev_bb = bb;
                 }
             }
-            // A Clif layout (via Layout type) contains an RPO ordered list of instructions within a block, which we
-            // can simply iterate over.
+            // A Clif layout (i.e. Clif Layout type) is an NOT RPO ordered list of instructions within a block.  
+            // It keeps track of the insertion order of blocks and instructions.
             let mut prev_inst = None;
             for (idx, inst) in func.layout.block_insts(block).enumerate() {
-                let op = convert_clif_instruction(ctx, &dfg, cctx, inst).unwrap();
+                let op = convert_instruction(ctx, &dfg, cctx, inst).unwrap();
                 match idx {
                     0 => {
                         op.insert_at_front(bb, ctx);

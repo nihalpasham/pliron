@@ -637,7 +637,6 @@ impl Parsable for CondBrOp {
     }
 }
 
-
 impl_verify_succ!(CondBrOp);
 #[op_interface_impl]
 impl BranchOpInterface for CondBrOp {
