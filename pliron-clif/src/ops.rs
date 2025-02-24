@@ -10,7 +10,7 @@ use pliron::{
     },
     context::Context,
     derive::format_op,
-    impl_canonical_syntax, impl_verify_succ,
+    impl_verify_succ,
     op::Op,
     operation::Operation,
     value::Value,
@@ -26,6 +26,7 @@ use crate::op_interfaces::{BinArithOp, IntBinArithOp};
 /// |---------|-------------|
 /// | `arg`   | any type    |
 #[def_op("clif.return")]
+#[format_op("`(` operands(CharSpace(`,`)) `)`")]
 #[derive_op_interface_impl(IsTerminatorInterface)]
 pub struct ReturnOp;
 impl ReturnOp {
@@ -52,7 +53,7 @@ impl ReturnOp {
         }
     }
 }
-impl_canonical_syntax!(ReturnOp);
+// impl_canonical_syntax!(ReturnOp);
 impl_verify_succ!(ReturnOp);
 
 macro_rules! new_int_bin_op_without_format {

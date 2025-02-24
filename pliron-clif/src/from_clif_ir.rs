@@ -539,7 +539,7 @@ mod tests {
 {
   ^entry_block_1v1(block_1v1_arg0:builtin.int <si32>,block_1v1_arg1:builtin.int <si32>):
     op_2v1_res0 = clif.iadd block_1v1_arg0,block_1v1_arg1:builtin.int <si32>;
-    clif.return (op_2v1_res0) [] []: <(builtin.int <si32>) -> ()>
+    clif.return (op_2v1_res0)
 }",
                             format!("{}", print_func)
                         );
@@ -573,7 +573,7 @@ mod tests {
 {
   ^entry_block_1v1(block_1v1_arg0:builtin.int <si32>,block_1v1_arg1:builtin.int <si32>):
     op_2v1_res0 = clif.iadd block_1v1_arg0,block_1v1_arg1:builtin.int <si32>;
-    clif.return (op_2v1_res0) [] []: <(builtin.int <si32>) -> ()>
+    clif.return (op_2v1_res0)
 }", format!("{}", print_func)
             );
         }
