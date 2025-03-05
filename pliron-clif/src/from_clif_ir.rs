@@ -637,4 +637,74 @@ mod tests {
         );
         }
     }
+
+    #[test]
+    fn test_ineg_fn_convert_clif_to_pliron() {
+        let clif_code = r#"
+    function %ineg(i32) -> i32 apple_aarch64 {
+        block0(v0: i32):
+            v1 = ineg v0
+            return v1
+    }
+    "#;
+
+        let functions = parse_functions(clif_code).expect("Failed to parse .clif");
+
+        for func in functions {
+            let mut cctx = ConversionCtx::default();
+            let mut ctx = Context::new();
+            builtin::register(&mut ctx);
+            crate::register(&mut ctx);
+            let func_op = match convert_function(&mut ctx, &mut cctx, func) {
+                Ok(op) => op,
+                Err(e) => panic!("Error: {}", e),
+            };
+            let print_func = func_op.disp(&ctx);
+            println!("{}", print_func);
+            assert_eq!(
+                "builtin.func @ineg: builtin.function <(builtin.int <si32>)->(builtin.int <si32>)> 
+{
+  ^entry_block_1v1(block_1v1_arg0:builtin.int <si32>):
+    op_2v1_res0 = clif.ineg block_1v1_arg0:builtin.int <si32>;
+    clif.return (op_2v1_res0)
+}",
+                format!("{}", print_func)
+            );
+        }
+    }
+
+    #[test]
+    fn test_umax_fn_convert_clif_to_pliron() {
+        let clif_code = r#"
+    function %umax(i32, i32) -> i32 apple_aarch64 {
+        block0(v0: i32, v1: i32):
+            v2 = umax v0, v1
+            return v2
+    }
+    "#;
+
+        let functions = parse_functions(clif_code).expect("Failed to parse .clif");
+
+        for func in functions {
+            let mut cctx = ConversionCtx::default();
+            let mut ctx = Context::new();
+            builtin::register(&mut ctx);
+            crate::register(&mut ctx);
+            let func_op = match convert_function(&mut ctx, &mut cctx, func) {
+                Ok(op) => op,
+                Err(e) => panic!("Error: {}", e),
+            };
+            let print_func = func_op.disp(&ctx);
+            println!("{}", print_func);
+            assert_eq!(
+            "builtin.func @umax: builtin.function <(builtin.int <si32>, builtin.int <si32>)->(builtin.int <si32>)> 
+{
+  ^entry_block_1v1(block_1v1_arg0:builtin.int <si32>,block_1v1_arg1:builtin.int <si32>):
+    op_2v1_res0 = clif.umax block_1v1_arg0,block_1v1_arg1:builtin.int <si32>;
+    clif.return (op_2v1_res0)
+}",
+            format!("{}", print_func)
+        );
+        }
+    }
 }

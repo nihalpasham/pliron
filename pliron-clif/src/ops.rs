@@ -16,7 +16,7 @@ use pliron::{
     value::Value,
 };
 
-use crate::op_interfaces::{BinArithOp, IntBinArithOp, UnaryArithOp, IntUnaryArithOp};
+use crate::op_interfaces::{BinArithOp, IntBinArithOp, IntUnaryArithOp, UnaryArithOp};
 
 /// Equivalent to CLIF's return opcode.
 ///
@@ -171,7 +171,6 @@ new_int_unary_op!(
     IabsOp,
     "clif.iabs"
 );
-
 
 pub fn register(ctx: &mut Context) {
     ReturnOp::register(ctx, ReturnOp::parser_fn);

@@ -1,4 +1,7 @@
-use pliron::{builtin::op_interfaces::{SameOperandsType, SameResultsType}, derive::op_interface};
+use pliron::{
+    builtin::op_interfaces::{SameOperandsType, SameResultsType},
+    derive::op_interface,
+};
 use thiserror::Error;
 
 use pliron::{
@@ -73,10 +76,7 @@ pub trait UnaryArithOp: SameOperandsType + SameResultsType + OneResultInterface 
             vec![],
             0,
         );
-        *Operation::get_op(op, ctx)
-            .downcast::<Self>()
-            .ok()
-            .unwrap()
+        *Operation::get_op(op, ctx).downcast::<Self>().ok().unwrap()
     }
 
     /// Verify that the operation has exactly one operand.
@@ -118,8 +118,6 @@ pub trait IntUnaryArithOp: UnaryArithOp {
         Ok(())
     }
 }
-
-
 
 #[derive(Error, Debug)]
 #[error("Integer binary arithmetic Op can only have signless integer result/operand type")]
