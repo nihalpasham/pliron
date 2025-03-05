@@ -26,8 +26,8 @@ use cranelift_codegen::{
 use rustc_hash::FxHashMap;
 
 use crate::{
-    op_interfaces::BinArithOp,
-    ops::{IAddOp, ReturnOp},
+    op_interfaces::{BinArithOp, UnaryArithOp},
+    ops::{IAddOp, IabsOp, InegOp, ReturnOp, UmaxOp, UminOp},
 };
 
 /// Converts a slice of [ClifValue]s to Pliron's [PlironValue]s.
@@ -112,6 +112,30 @@ fn convert_instruction(
             let operands = convert_operands(ctx, dfg, cctx, &inst_args)?;
             let iadd_op = IAddOp::new(ctx, operands[0], operands[1]);
             let op = iadd_op.get_operation();
+            return Ok(op);
+        }
+        Opcode::Umin => {
+            let operands = convert_operands(ctx, dfg, cctx, &inst_args)?;
+            let umin_op = UminOp::new(ctx, operands[0], operands[1]);
+            let op = umin_op.get_operation();
+            return Ok(op);
+        }
+        Opcode::Umax => {
+            let operands = convert_operands(ctx, dfg, cctx, &inst_args)?;
+            let umax_op = UmaxOp::new(ctx, operands[0], operands[1]);
+            let op = umax_op.get_operation();
+            return Ok(op);
+        }
+        Opcode::Ineg => {
+            let operands = convert_operands(ctx, dfg, cctx, &inst_args)?;
+            let ineg_op = InegOp::new(ctx, operands[0]);
+            let op = ineg_op.get_operation();
+            return Ok(op);
+        }
+        Opcode::Iabs => {
+            let operands = convert_operands(ctx, dfg, cctx, &inst_args)?;
+            let iabs_op = IabsOp::new(ctx, operands[0]);
+            let op = iabs_op.get_operation();
             return Ok(op);
         }
         Opcode::Return => match inst_args.len() {
@@ -576,6 +600,41 @@ mod tests {
     clif.return (op_2v1_res0)
 }", format!("{}", print_func)
             );
+        }
+    }
+
+    #[test]
+    fn test_umin_fn_convert_clif_to_pliron() {
+        let clif_code = r#"
+    function %umin(i32, i32) -> i32 apple_aarch64 {
+        block0(v0: i32, v1: i32):
+            v2 = umin v0, v1
+            return v2
+    }
+    "#;
+
+        let functions = parse_functions(clif_code).expect("Failed to parse .clif");
+
+        for func in functions {
+            let mut cctx = ConversionCtx::default();
+            let mut ctx = Context::new();
+            builtin::register(&mut ctx);
+            crate::register(&mut ctx);
+            let func_op = match convert_function(&mut ctx, &mut cctx, func) {
+                Ok(op) => op,
+                Err(e) => panic!("Error: {}", e),
+            };
+            let print_func = func_op.disp(&ctx);
+            println!("{}", print_func);
+            assert_eq!(
+            "builtin.func @umin: builtin.function <(builtin.int <si32>, builtin.int <si32>)->(builtin.int <si32>)> 
+{
+  ^entry_block_1v1(block_1v1_arg0:builtin.int <si32>,block_1v1_arg1:builtin.int <si32>):
+    op_2v1_res0 = clif.umin block_1v1_arg0,block_1v1_arg1:builtin.int <si32>;
+    clif.return (op_2v1_res0)
+}",
+            format!("{}", print_func)
+        );
         }
     }
 }

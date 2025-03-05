@@ -16,7 +16,7 @@ use pliron::{
     value::Value,
 };
 
-use crate::op_interfaces::{BinArithOp, IntBinArithOp};
+use crate::op_interfaces::{BinArithOp, IntBinArithOp, UnaryArithOp, IntUnaryArithOp};
 
 /// Equivalent to CLIF's return opcode.
 ///
@@ -97,6 +97,45 @@ macro_rules! new_int_bin_op {
     }
 }
 
+macro_rules! new_int_unary_op_without_format {
+    (   $(#[$outer:meta])*
+        $op_name:ident, $op_id:literal
+    ) => {
+        #[def_op($op_id)]
+        $(#[$outer])*
+        /// ### Operand:
+        ///
+        /// | operand | description      |
+        /// |---------|------------------|
+        /// | `x`     | Signless integer |
+        ///
+        /// ### Result:
+        /// | result | description      |
+        /// |--------|------------------|
+        /// | `res`  | Signless integer |
+        #[pliron::derive::derive_op_interface_impl(
+            OneResultInterface, SameOperandsType, SameResultsType,
+            UnaryArithOp, IntUnaryArithOp
+        )]
+        pub struct $op_name;
+
+        impl_verify_succ!($op_name);
+    }
+}
+
+macro_rules! new_int_unary_op {
+    (   $(#[$outer:meta])*
+        $op_name:ident, $op_id:literal
+    ) => {
+        new_int_unary_op_without_format!(
+            $(#[$outer])*
+            #[format_op("`$0` : type($0)")]
+            $op_name,
+            $op_id
+        );
+    }
+}
+
 new_int_bin_op!(
     /// Equivalent to CLIF's standard integer addition (with no overflow) opcode.
     IAddOp,
@@ -109,8 +148,37 @@ new_int_bin_op!(
     "clif.isub"
 );
 
+new_int_bin_op!(
+    /// Equivalent to CLIF's standard integer subtraction (with no overflow) opcode.
+    UminOp,
+    "clif.umin"
+);
+
+new_int_bin_op!(
+    /// Equivalent to CLIF's standard integer subtraction (with no overflow) opcode.
+    UmaxOp,
+    "clif.umax"
+);
+
+new_int_unary_op!(
+    /// Equivalent to CLIF's integer negation (`ineg`) opcode.
+    InegOp,
+    "clif.ineg"
+);
+
+new_int_unary_op!(
+    /// Equivalent to CLIF's integer negation (`ineg`) opcode.
+    IabsOp,
+    "clif.iabs"
+);
+
+
 pub fn register(ctx: &mut Context) {
     ReturnOp::register(ctx, ReturnOp::parser_fn);
     IAddOp::register(ctx, IAddOp::parser_fn);
     ISubOp::register(ctx, ISubOp::parser_fn);
+    UminOp::register(ctx, UminOp::parser_fn);
+    UmaxOp::register(ctx, UmaxOp::parser_fn);
+    InegOp::register(ctx, InegOp::parser_fn);
+    IabsOp::register(ctx, IabsOp::parser_fn);
 }
