@@ -122,7 +122,7 @@ pub trait IntUnaryArithOp: UnaryArithOp {
 #[derive(Error, Debug)]
 #[error("Integer binary arithmetic Op can only have signless integer result/operand type")]
 pub struct IntBinArithOpErr;
-
+ 
 /// Integer binary arithmetic [Op]
 #[op_interface]
 pub trait IntBinArithOp: BinArithOp {

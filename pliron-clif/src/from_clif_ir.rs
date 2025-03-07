@@ -665,7 +665,7 @@ mod tests {
                 "builtin.func @ineg: builtin.function <(builtin.int <si32>)->(builtin.int <si32>)> 
 {
   ^entry_block_1v1(block_1v1_arg0:builtin.int <si32>):
-    op_2v1_res0 = clif.ineg block_1v1_arg0:builtin.int <si32>;
+    op_2v1_res0 = clif.ineg block_1v1_arg0;
     clif.return (op_2v1_res0)
 }",
                 format!("{}", print_func)

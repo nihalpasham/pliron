@@ -129,7 +129,7 @@ macro_rules! new_int_unary_op {
     ) => {
         new_int_unary_op_without_format!(
             $(#[$outer])*
-            #[format_op("`$0` : type($0)")]
+            #[format_op("$0':'type($0)")]
             $op_name,
             $op_id
         );
