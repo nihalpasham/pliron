@@ -196,7 +196,6 @@ new_int_bin_op!(
 );
 
 // Define the integer subtraction op (`clif.isub`).
-
 new_int_bin_op!(
     /// Equivalent to CLIF's standard integer subtraction (with no overflow) opcode.
     ISubOp,
@@ -218,7 +217,6 @@ new_int_bin_op!(
 );
 
 // Define the integer negation op (`clif.ineg`).
-
 new_int_unary_op!(
     /// Equivalent to CLIF's integer negation (`ineg`) opcode.
     InegOp,

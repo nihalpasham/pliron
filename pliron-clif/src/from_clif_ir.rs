@@ -415,39 +415,71 @@ fn convert_instruction_w_rpo(
     cctx: &mut ConversionCtx,
     inst: Inst,
 ) -> Result<Ptr<Operation>> {
-    // Convert the instruction based on its opcode
+    // Retrieve the opcode and arguments for the instruction.
     let clif_opcode = dfg.insts[inst].opcode();
     let inst_args = dfg.inst_args(inst);
     match clif_opcode {
+        // Handle integer addition.
         Opcode::Iadd => {
             let operands = convert_operands_w_rpo(dfg, cctx, &inst_args)?;
             let iadd_op = IAddOp::new(ctx, operands[0], operands[1]);
             let op = iadd_op.get_operation();
             return Ok(op);
         }
+        // Handle integer subtraction.
         Opcode::Isub => {
-            let operands = convert_operands(ctx, dfg, cctx, &inst_args)?;
+            let operands = convert_operands_w_rpo(dfg, cctx, &inst_args)?;
             let isub_op = ISubOp::new(ctx, operands[0], operands[1]);
             let op = isub_op.get_operation();
             return Ok(op);
         }
-
+        // Handle unsigned minimum.
+        Opcode::Umin => {
+            let operands = convert_operands_w_rpo(dfg, cctx, &inst_args)?;
+            let umin_op = UminOp::new(ctx, operands[0], operands[1]);
+            let op = umin_op.get_operation();
+            return Ok(op);
+        }
+        // Handle unsigned maximum.
+        Opcode::Umax => {
+            let operands = convert_operands_w_rpo(dfg, cctx, &inst_args)?;
+            let umax_op = UmaxOp::new(ctx, operands[0], operands[1]);
+            let op = umax_op.get_operation();
+            return Ok(op);
+        }
+        // Handle integer negation.
+        Opcode::Ineg => {
+            let operands = convert_operands_w_rpo(dfg, cctx, &inst_args)?;
+            let ineg_op = InegOp::new(ctx, operands[0]);
+            let op = ineg_op.get_operation();
+            return Ok(op);
+        }
+        // Handle integer absolute value.
+        Opcode::Iabs => {
+            let operands = convert_operands_w_rpo(dfg, cctx, &inst_args)?;
+            let iabs_op = IabsOp::new(ctx, operands[0]);
+            let op = iabs_op.get_operation();
+            return Ok(op);
+        }
+        // Handle return instructions.
         Opcode::Return => match inst_args.len() {
-            // No return values
+            // Return with no operands.
             0 => {
                 let return_op = ReturnOp::new(ctx, None);
                 let op = return_op.get_operation();
                 return Ok(op);
             }
-            // a single return value
+            // Return with a single operand.
             1 => {
                 let operands = convert_operands_w_rpo(dfg, cctx, &inst_args)?;
                 let return_op = ReturnOp::new(ctx, Some(operands[0]));
                 let op = return_op.get_operation();
                 return Ok(op);
             }
+            // Multiple return values are not supported.
             _ => unimplemented!("Multiple return values are not supported"),
         },
+        // For any unsupported opcode, panic with an error message.
         _ => unimplemented!("Opcode {} is not implemented", clif_opcode),
     }
 }
@@ -694,7 +726,7 @@ mod tests {
 
     /// Test converting a Cranelift function that implements unsigned minimum (umin) to Pliron.
     #[test]
-    fn test_umin_fn_convert_clif_to_pliron() {
+    fn test_umin_fn_convert_clif_to_pliron_w_rpo() {
         let clif_code = r#"
     function %umin(i32, i32) -> i32 apple_aarch64 {
         block0(v0: i32, v1: i32):
@@ -710,7 +742,7 @@ mod tests {
             let mut ctx = Context::new();
             builtin::register(&mut ctx);
             crate::register(&mut ctx);
-            let func_op = match convert_function(&mut ctx, &mut cctx, func) {
+            let func_op = match convert_function_w_rpo(&mut ctx, &mut cctx, func) {
                 Ok(op) => op,
                 Err(e) => panic!("Error: {}", e),
             };
@@ -730,7 +762,7 @@ mod tests {
 
     /// Test converting a Cranelift function that implements integer negation (ineg) to Pliron.
     #[test]
-    fn test_ineg_fn_convert_clif_to_pliron() {
+    fn test_ineg_fn_convert_clif_to_pliron_w_rpo() {
         let clif_code = r#"
     function %ineg(i32) -> i32 apple_aarch64 {
         block0(v0: i32):
@@ -746,7 +778,7 @@ mod tests {
             let mut ctx = Context::new();
             builtin::register(&mut ctx);
             crate::register(&mut ctx);
-            let func_op = match convert_function(&mut ctx, &mut cctx, func) {
+            let func_op = match convert_function_w_rpo(&mut ctx, &mut cctx, func) {
                 Ok(op) => op,
                 Err(e) => panic!("Error: {}", e),
             };
@@ -766,7 +798,7 @@ mod tests {
 
     /// Test converting a Cranelift function that implements unsigned maximum (umax) to Pliron.
     #[test]
-    fn test_umax_fn_convert_clif_to_pliron() {
+    fn test_umax_fn_convert_clif_to_pliron_w_rpo() {
         let clif_code = r#"
     function %umax(i32, i32) -> i32 apple_aarch64 {
         block0(v0: i32, v1: i32):
@@ -782,7 +814,7 @@ mod tests {
             let mut ctx = Context::new();
             builtin::register(&mut ctx);
             crate::register(&mut ctx);
-            let func_op = match convert_function(&mut ctx, &mut cctx, func) {
+            let func_op = match convert_function_w_rpo(&mut ctx, &mut cctx, func) {
                 Ok(op) => op,
                 Err(e) => panic!("Error: {}", e),
             };
@@ -802,7 +834,7 @@ mod tests {
 
      /// Test converting a Cranelift function that implements integer subtraction (isub) to Pliron.
      #[test]
-     fn test_sub_fn_convert_clif_to_pliron() {
+     fn test_sub_fn_convert_clif_to_pliron_w_rpo() {
          let clif_code = r#"
          function %sub(i32, i32) -> i32 apple_aarch64 {
              block0(v0: i32, v1: i32):
@@ -818,7 +850,7 @@ mod tests {
              let mut ctx = Context::new();
              builtin::register(&mut ctx);
              crate::register(&mut ctx);
-             let func_op = match convert_function(&mut ctx, &mut cctx, func) {
+             let func_op = match convert_function_w_rpo(&mut ctx, &mut cctx, func) {
                  Ok(op) => op,
                  Err(e) => panic!("Error: {}", e),
              };
@@ -837,7 +869,7 @@ mod tests {
  
      /// Test converting a Cranelift function that implements integer absolute value (iabs) to Pliron.
      #[test]
-     fn test_abs_fn_convert_clif_to_pliron() {
+     fn test_abs_fn_convert_clif_to_pliron_w_rpo() {
          let clif_code = r#"
          function %abs(i32) -> i32 apple_aarch64 {
              block0(v0: i32):
@@ -853,7 +885,7 @@ mod tests {
              let mut ctx = Context::new();
              builtin::register(&mut ctx);
              crate::register(&mut ctx);
-             let func_op = match convert_function(&mut ctx, &mut cctx, func) {
+             let func_op = match convert_function_w_rpo(&mut ctx, &mut cctx, func) {
                  Ok(op) => op,
                  Err(e) => panic!("Error: {}", e),
              };
