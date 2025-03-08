@@ -1,3 +1,5 @@
+// Import required types and modules from Pliron and Cranelift.
+// Pliron imports: Basic IR entities such as context, operations, regions, types, etc.
 use pliron::{
     basic_block::BasicBlock,
     builtin::{
@@ -15,6 +17,7 @@ use pliron::{
     value::Value as PlironValue,
 };
 
+// Cranelift imports: Provide IR structures and analysis tools for Cranelift IR.
 use cranelift_codegen::{
     dominator_tree::DominatorTree,
     flowgraph::ControlFlowGraph,
@@ -23,46 +26,51 @@ use cranelift_codegen::{
         Value as ClifValue, ValueDef,
     },
 };
+// Import a fast hash map from rustc_hash crate.
 use rustc_hash::FxHashMap;
 
+// Import our own modules that define op interfaces and operations.
 use crate::{
-    op_interfaces::BinArithOp,
-    ops::{IAddOp, ReturnOp},
+    op_interfaces::{BinArithOp, UnaryArithOp},
+    ops::{IAddOp, ISubOp, IabsOp, InegOp, ReturnOp, UmaxOp, UminOp},
 };
 
-/// Converts a slice of [ClifValue]s to Pliron's [PlironValue]s.
+/// Converts a slice of Cranelift IR values ([ClifValue]) into Pliron IR values ([PlironValue]).
 ///
-/// This function processes each operand, determining if it is defined by an instruction or
-/// a block parameter, and converts it into the corresponding `PlironValue`.
+/// This function iterates over the provided Cranelift operands, determines whether each operand
+/// is defined by an instruction result or a block parameter, and converts it accordingly.
 ///
 /// # Arguments
-/// - `ctx`: The Pliron context for creating IR entities.
-/// - `dfg`: The data flow graph containing the original operand definitions.
-/// - `cctx`: The conversion context for caching converted entities.
-/// - `operands`: The slice of `ClifValue` to convert.
+/// - `ctx`: The Pliron context used to create or lookup IR entities.
+/// - `dfg`: The Cranelift Data Flow Graph that holds definitions for values.
+/// - `cctx`: The conversion context which caches already converted entities.
+/// - `operands`: A slice of Cranelift values to be converted.
 ///
 /// # Returns
-/// A `Result` containing a vector of converted `PlironValue` or an error if conversion fails.
+/// A Result containing a vector of converted [PlironValue]s or an error if conversion fails.
 ///
 /// # Panics
-/// Panics if a `Union` value definition is encountered, as it is not yet implemented.
+/// Panics if a `Union` value definition is encountered (not yet implemented).
 fn convert_operands(
     ctx: &mut Context,
     dfg: &DataFlowGraph,
     cctx: &mut ConversionCtx,
     operands: &[ClifValue],
 ) -> Result<Vec<PlironValue>> {
+     // Preallocate a vector with the capacity of the operands length.
     let mut pliron_operands = Vec::with_capacity(operands.len());
     for operand in operands {
         let operand_def = dfg.value_def(*operand);
         match operand_def {
-            // Is this a value defined by an instruction? If so, convert instruction result
+            // If the value is defined as a result of an instruction:
+            // Convert the instruction (if not already converted) and create a corresponding op-result value.
             ValueDef::Result(inst, idx) => {
                 let op = convert_instruction(ctx, dfg, cctx, inst)?;
                 let pliron_value = PlironValue::OpResult { op, res_idx: idx };
                 pliron_operands.push(pliron_value);
             }
-            // Is this value a BasicBlock parameter? If so, convert block parameter
+            // If the value is a block parameter:
+            // Convert the corresponding basic block and create a block argument value.
             ValueDef::Param(block, idx) => {
                 let block = convert_block(ctx, dfg, cctx, block)?;
                 let pliron_value = PlironValue::BlockArgument {
@@ -77,77 +85,116 @@ fn convert_operands(
     Ok(pliron_operands)
 }
 
-/// Converts a Cranelift [Inst] to Pliron's [Ptr<Operation>].
+/// Converts a Cranelift instruction ([Inst]) to a Pliron operation ([Ptr<Operation>]).
 ///
-/// This function checks if the instruction has already been converted (using `cctx` for caching).
-/// If not, it converts the instruction based on its opcode (like `Iadd` and `Return`).
+/// This function first checks whether the instruction has already been converted (caching is used).
+/// If not, it determines the opcode and converts the instruction accordingly.
+/// Supported opcodes include: Iadd, Umin, Umax, Ineg, Iabs, and Return.
 ///
 /// # Arguments
-/// - `ctx`: The Pliron context for creating IR entities.
-/// - `dfg`: The data flow graph containing the original instruction's information.
-/// - `cctx`: The conversion context for caching converted entities.
-/// - `inst`: The Cranelift `Inst` to convert.
+/// - `ctx`: The Pliron context for IR entity creation.
+/// - `dfg`: The Cranelift Data Flow Graph containing instruction definitions.
+/// - `cctx`: The conversion context for caching converted instructions.
+/// - `inst`: The Cranelift instruction to convert.
 ///
 /// # Returns
-/// A `Result` containing the converted `Operation` or an error if conversion fails.
+/// A Result containing a pointer to the converted [Operation] or an error if conversion fails.
 ///
 /// # Panics
-/// Panics if the opcode is not yet implemented
+/// Panics if an unsupported opcode is encountered.
 fn convert_instruction(
     ctx: &mut Context,
     dfg: &DataFlowGraph,
     cctx: &mut ConversionCtx,
     inst: Inst,
 ) -> Result<Ptr<Operation>> {
-    // Check if the instruction has already been converted
+    // If the instruction has already been converted, return the cached operation.
     if let Some(op) = cctx.ops.get(&inst) {
         return Ok(*op);
     };
 
-    // Convert the instruction based on its opcode
+    // Retrieve the opcode and arguments for the instruction.
     let clif_opcode = dfg.insts[inst].opcode();
     let inst_args = dfg.inst_args(inst);
     match clif_opcode {
+        // Handle integer addition.
         Opcode::Iadd => {
             let operands = convert_operands(ctx, dfg, cctx, &inst_args)?;
             let iadd_op = IAddOp::new(ctx, operands[0], operands[1]);
             let op = iadd_op.get_operation();
             return Ok(op);
         }
+        // Handle integer subtraction.
+        Opcode::Isub => {
+            let operands = convert_operands(ctx, dfg, cctx, &inst_args)?;
+            let isub_op = ISubOp::new(ctx, operands[0], operands[1]);
+            let op = isub_op.get_operation();
+            return Ok(op);
+        }
+        // Handle unsigned minimum.
+        Opcode::Umin => {
+            let operands = convert_operands(ctx, dfg, cctx, &inst_args)?;
+            let umin_op = UminOp::new(ctx, operands[0], operands[1]);
+            let op = umin_op.get_operation();
+            return Ok(op);
+        }
+        // Handle unsigned maximum.
+        Opcode::Umax => {
+            let operands = convert_operands(ctx, dfg, cctx, &inst_args)?;
+            let umax_op = UmaxOp::new(ctx, operands[0], operands[1]);
+            let op = umax_op.get_operation();
+            return Ok(op);
+        }
+        // Handle integer negation.
+        Opcode::Ineg => {
+            let operands = convert_operands(ctx, dfg, cctx, &inst_args)?;
+            let ineg_op = InegOp::new(ctx, operands[0]);
+            let op = ineg_op.get_operation();
+            return Ok(op);
+        }
+        // Handle integer absolute value.
+        Opcode::Iabs => {
+            let operands = convert_operands(ctx, dfg, cctx, &inst_args)?;
+            let iabs_op = IabsOp::new(ctx, operands[0]);
+            let op = iabs_op.get_operation();
+            return Ok(op);
+        }
+        // Handle return instructions.
         Opcode::Return => match inst_args.len() {
-            // No return values
+            // Return with no operands.
             0 => {
                 let return_op = ReturnOp::new(ctx, None);
                 let op = return_op.get_operation();
                 return Ok(op);
             }
-            // a single return value
+            // Return with a single operand.
             1 => {
                 let operands = convert_operands(ctx, dfg, cctx, &inst_args)?;
                 let return_op = ReturnOp::new(ctx, Some(operands[0]));
                 let op = return_op.get_operation();
                 return Ok(op);
             }
+            // Multiple return values are not supported.
             _ => unimplemented!("Multiple return values are not supported"),
         },
+        // For any unsupported opcode, panic with an error message.
         _ => unimplemented!("Opcode {} is not implemented", clif_opcode),
     }
 }
 
-/// Converts a [ClifBasicBlock] to Pliron's [BasicBlock].
+/// Converts a Cranelift basic block ([ClifBasicBlock]) to a Pliron basic block ([BasicBlock]).
 ///
-/// This function checks if the block has already been converted (using `cctx` for caching).
-/// If not, it creates a new `BasicBlock` in Pliron's IR, deriving its label and argument types
-/// from the provided `ClifBasicBlock`.
+/// This function checks the conversion cache; if the block is not yet converted, it creates a new
+/// Pliron basic block using a generated label and by converting the argument types of the block.
 ///
 /// # Arguments
-/// - `ctx`: The Pliron context for creating IR entities.
-/// - `dfg`: The data flow graph containing the original block's information.
-/// - `cctx`: The conversion context for caching converted entities.
-/// - `block`: The `ClifBasicBlock` to convert.
+/// - `ctx`: The Pliron context used for creating IR entities.
+/// - `dfg`: The Cranelift Data Flow Graph holding block parameter information.
+/// - `cctx`: The conversion context for caching converted basic blocks.
+/// - `block`: The Cranelift basic block to convert.
 ///
 /// # Returns
-/// A `Result` containing the converted `BasicBlock` or an error if conversion fails.
+/// A Result containing a pointer to the converted [BasicBlock] or an error if conversion fails.
 fn convert_block(
     ctx: &mut Context,
     dfg: &DataFlowGraph,
@@ -173,17 +220,16 @@ fn convert_block(
     Ok(pliron_block)
 }
 
-/// Converts a [ClifType] to Pliron's [TypeObj].
+/// Converts a Cranelift type ([ClifType]) to a Pliron type ([TypeObj]).
 ///
-/// This function maps Cranelift types to their corresponding Pliron types. Currently, only `i32`
-/// is supported.
-///
+/// This function currently supports conversion for `i32` only, mapping it to a 32-bit signed integer type.
+/// 
 /// # Arguments
-/// - `ctx`: The Pliron context for creating IR entities.
-/// - `ty`: The `ClifType` to convert.
+/// - `ctx`: The Pliron context used for creating type objects.
+/// - `ty`: The Cranelift type to convert.
 ///
 /// # Returns
-/// A `Result` containing the converted `TypeObj` or an error if conversion fails.
+/// A Result containing a pointer to the converted [TypeObj] or an error if conversion fails.
 ///
 /// # Panics
 /// Panics if the provided type is not yet implemented.
@@ -197,18 +243,18 @@ fn convert_type(ctx: &mut Context, ty: ClifType) -> Result<Ptr<TypeObj>> {
     }
 }
 
-/// Converts a Cranelift [Function] to a Pliron [FuncOp].
+/// Converts a Cranelift function ([Function]) to a Pliron function operation ([FuncOp]).
 ///
-/// This function translates all Cranelift entities (instructions, blocks, operands, types, etc.)
-/// into their Pliron equivalents and stores them in the conversion context (`cctx`).
+/// This function translates the function signature, entry block, and all blocks and instructions,
+/// storing converted entities in the conversion context for caching and linking.
 ///
 /// # Arguments
-/// - `ctx`: The Pliron context for creating IR entities.
-/// - `cctx`: The conversion context for caching converted entities.
-/// - `func`: The Cranelift `Function` to convert.
+/// - `ctx`: The Pliron context used for IR creation.
+/// - `cctx`: The conversion context used to cache converted entities.
+/// - `func`: The Cranelift function to convert.
 ///
 /// # Returns
-/// A `Result` containing the converted `FuncOp` or an error if conversion fails.
+/// A Result containing the converted [FuncOp] or an error if conversion fails.
 ///
 /// # Panics
 /// Panics if the function's entry block or types cannot be converted.
@@ -299,6 +345,18 @@ fn convert_function(ctx: &mut Context, cctx: &mut ConversionCtx, func: Function)
     Ok(func_op)
 }
 
+/// Converts operands in reverse postorder (RPO).
+///
+/// With RPO, we assume that any operand's definition has already been converted,
+/// so we can safely unwrap conversion results.
+///
+/// # Arguments
+/// - `dfg`: The Cranelift data flow graph.
+/// - `cctx`: The conversion context caching converted entities.
+/// - `operands`: The slice of Cranelift values to convert.
+///
+/// # Returns
+/// A Result containing a vector of converted Pliron values.
 fn convert_operands_w_rpo(
     dfg: &DataFlowGraph,
     cctx: &mut ConversionCtx,
@@ -338,6 +396,19 @@ fn convert_operands_w_rpo(
     Ok(pliron_operands)
 }
 
+/// Converts a Cranelift instruction ([Inst]) to a Pliron operation using RPO assumptions.
+///
+/// This version of conversion assumes that operand definitions have already been converted,
+/// allowing safe unwrapping when retrieving operands.
+///
+/// # Arguments
+/// - `ctx`: The Pliron context for IR creation.
+/// - `dfg`: The Cranelift data flow graph.
+/// - `cctx`: The conversion context caching converted entities.
+/// - `inst`: The Cranelift instruction to convert.
+///
+/// # Returns
+/// A Result containing a pointer to the converted [Operation].
 fn convert_instruction_w_rpo(
     ctx: &mut Context,
     dfg: &DataFlowGraph,
@@ -354,6 +425,13 @@ fn convert_instruction_w_rpo(
             let op = iadd_op.get_operation();
             return Ok(op);
         }
+        Opcode::Isub => {
+            let operands = convert_operands(ctx, dfg, cctx, &inst_args)?;
+            let isub_op = ISubOp::new(ctx, operands[0], operands[1]);
+            let op = isub_op.get_operation();
+            return Ok(op);
+        }
+
         Opcode::Return => match inst_args.len() {
             // No return values
             0 => {
@@ -374,6 +452,18 @@ fn convert_instruction_w_rpo(
     }
 }
 
+/// Converts a Cranelift basic block to a Pliron basic block using RPO conversion.
+///
+/// This version does not use the conversion cache since RPO ordering ensures that operands are already
+/// converted in the proper order.
+///
+/// # Arguments
+/// - `ctx`: The Pliron context for IR creation.
+/// - `dfg`: The Cranelift data flow graph.
+/// - `block`: The Cranelift basic block to convert.
+///
+/// # Returns
+/// A Result containing a pointer to the converted [BasicBlock].
 fn convert_block_w_rpo(
     ctx: &mut Context,
     dfg: &DataFlowGraph,
@@ -393,6 +483,18 @@ fn convert_block_w_rpo(
     Ok(pliron_block)
 }
 
+/// Converts a Cranelift function to a Pliron function operation using Reverse Postorder (RPO).
+///
+/// This function is similar to `convert_function` but leverages RPO ordering,
+/// which guarantees that definitions are processed before their uses.
+///
+/// # Arguments
+/// - `ctx`: The Pliron context for IR creation.
+/// - `cctx`: The conversion context caching converted entities.
+/// - `func`: The Cranelift function to convert.
+///
+/// # Returns
+/// A Result containing the converted [FuncOp] or an error if conversion fails.
 fn convert_function_w_rpo(
     ctx: &mut Context,
     cctx: &mut ConversionCtx,
@@ -469,7 +571,9 @@ fn convert_function_w_rpo(
     // Create the Pliron `FuncOp`
     let func_op = FuncOp::new(ctx, &Identifier::try_new(func_name)?, pliron_func_type);
 
-    // Update the conversion context
+    // Update the conversion context:
+    // Map the Cranelift entry block to the Pliron entry block,
+    // store the function's region and the function op.
     let pliron_entry_blk = func_op.get_entry_block(ctx);
     if let Some(blk) = func.layout.entry_block() {
         cctx.bbs.insert(blk, pliron_entry_blk);
@@ -487,15 +591,15 @@ fn convert_function_w_rpo(
 }
 /// Tracks converted Pliron entities during IR transformation.
 ///
-/// This struct ensures efficient lookup and prevents redundant conversions of operations,
-/// regions, and basic blocks during the transformation process.
+/// This structure caches converted operations, regions, and basic blocks,
+/// ensuring efficient lookups and preventing redundant conversions.
 ///
 /// # Fields
-/// - `ops`: Maps original instructions to their converted `Operation` entities.
-/// - `regs`: Stores pointers to converted `Region` entities.
-/// - `bbs`: Maps `ClifBasicBlock`s to their corresponding Pliron `BasicBlock`s.
-/// - `entry_block`: The entry `BasicBlock` of the function being processed, if any.
-/// - `func_op`: The root `Operation` representing the function being processed, if any.
+/// - `ops`: Maps Cranelift instructions (Inst) to their corresponding Pliron [Operation] pointers.
+/// - `regs`: Stores pointers to converted [Region] entities.
+/// - `bbs`: Maps Cranelift basic blocks to their corresponding Pliron [BasicBlock] pointers.
+/// - `entry_block`: The entry [BasicBlock] of the function being processed.
+/// - `func_op`: The root [Operation] representing the function being processed.
 #[derive(Default)]
 struct ConversionCtx {
     ops: FxHashMap<Inst, Ptr<Operation>>,
@@ -507,10 +611,12 @@ struct ConversionCtx {
 
 #[cfg(test)]
 mod tests {
+    // Import required items for testing.
     use super::*;
     use cranelift_reader::parse_functions;
     use pliron::{builtin, printable::Printable};
 
+    /// Test converting a Cranelift function that adds two i32 values to a Pliron function.
     #[test]
     fn test_add_fn_convert_clif_to_pliron() {
         let clif_code = r#"
@@ -521,19 +627,25 @@ mod tests {
         }
     "#;
 
+        // Parse the CLIF code to obtain Cranelift functions.
         let functions = parse_functions(clif_code).expect("Failed to parse .clif");
 
+        // Process each function.
         for func in functions {
             let mut cctx = ConversionCtx::default();
             let mut ctx = Context::new();
+            // Register built-in and custom dialects/ops.
             builtin::register(&mut ctx);
             crate::register(&mut ctx);
+            // Convert the Cranelift function to a Pliron function.
             let func_op = match convert_function(&mut ctx, &mut cctx, func) {
                 Ok(op) => op,
                 Err(e) => panic!("Error: {}", e),
             };
+            // Print the resulting function.
             let print_func = func_op.disp(&ctx);
             println!("{}", print_func);
+            // Assert that the printed function matches the expected output.
             assert_eq!(
                             "builtin.func @add: builtin.function <(builtin.int <si32>, builtin.int <si32>)->(builtin.int <si32>)> 
 {
@@ -546,6 +658,7 @@ mod tests {
         }
     }
 
+    /// Test converting a Cranelift function to Pliron using RPO ordering.
     #[test]
     fn test_add_fn_convert_clif_to_pliron_w_rpo() {
         let clif_code = r#"
@@ -578,4 +691,183 @@ mod tests {
             );
         }
     }
+
+    /// Test converting a Cranelift function that implements unsigned minimum (umin) to Pliron.
+    #[test]
+    fn test_umin_fn_convert_clif_to_pliron() {
+        let clif_code = r#"
+    function %umin(i32, i32) -> i32 apple_aarch64 {
+        block0(v0: i32, v1: i32):
+            v2 = umin v0, v1
+            return v2
+    }
+    "#;
+
+        let functions = parse_functions(clif_code).expect("Failed to parse .clif");
+
+        for func in functions {
+            let mut cctx = ConversionCtx::default();
+            let mut ctx = Context::new();
+            builtin::register(&mut ctx);
+            crate::register(&mut ctx);
+            let func_op = match convert_function(&mut ctx, &mut cctx, func) {
+                Ok(op) => op,
+                Err(e) => panic!("Error: {}", e),
+            };
+            let print_func = func_op.disp(&ctx);
+            println!("{}", print_func);
+            assert_eq!(
+            "builtin.func @umin: builtin.function <(builtin.int <si32>, builtin.int <si32>)->(builtin.int <si32>)> 
+{
+  ^entry_block_1v1(block_1v1_arg0:builtin.int <si32>,block_1v1_arg1:builtin.int <si32>):
+    op_2v1_res0 = clif.umin block_1v1_arg0,block_1v1_arg1:builtin.int <si32>;
+    clif.return (op_2v1_res0)
+}",
+            format!("{}", print_func)
+        );
+        }
+    }
+
+    /// Test converting a Cranelift function that implements integer negation (ineg) to Pliron.
+    #[test]
+    fn test_ineg_fn_convert_clif_to_pliron() {
+        let clif_code = r#"
+    function %ineg(i32) -> i32 apple_aarch64 {
+        block0(v0: i32):
+            v1 = ineg v0
+            return v1
+    }
+    "#;
+
+        let functions = parse_functions(clif_code).expect("Failed to parse .clif");
+
+        for func in functions {
+            let mut cctx = ConversionCtx::default();
+            let mut ctx = Context::new();
+            builtin::register(&mut ctx);
+            crate::register(&mut ctx);
+            let func_op = match convert_function(&mut ctx, &mut cctx, func) {
+                Ok(op) => op,
+                Err(e) => panic!("Error: {}", e),
+            };
+            let print_func = func_op.disp(&ctx);
+            println!("{}", print_func);
+            assert_eq!(
+                "builtin.func @ineg: builtin.function <(builtin.int <si32>)->(builtin.int <si32>)> 
+{
+  ^entry_block_1v1(block_1v1_arg0:builtin.int <si32>):
+    op_2v1_res0 = clif.ineg block_1v1_arg0;
+    clif.return (op_2v1_res0)
+}",
+                format!("{}", print_func)
+            );
+        }
+    }
+
+    /// Test converting a Cranelift function that implements unsigned maximum (umax) to Pliron.
+    #[test]
+    fn test_umax_fn_convert_clif_to_pliron() {
+        let clif_code = r#"
+    function %umax(i32, i32) -> i32 apple_aarch64 {
+        block0(v0: i32, v1: i32):
+            v2 = umax v0, v1
+            return v2
+    }
+    "#;
+
+        let functions = parse_functions(clif_code).expect("Failed to parse .clif");
+
+        for func in functions {
+            let mut cctx = ConversionCtx::default();
+            let mut ctx = Context::new();
+            builtin::register(&mut ctx);
+            crate::register(&mut ctx);
+            let func_op = match convert_function(&mut ctx, &mut cctx, func) {
+                Ok(op) => op,
+                Err(e) => panic!("Error: {}", e),
+            };
+            let print_func = func_op.disp(&ctx);
+            println!("{}", print_func);
+            assert_eq!(
+            "builtin.func @umax: builtin.function <(builtin.int <si32>, builtin.int <si32>)->(builtin.int <si32>)> 
+{
+  ^entry_block_1v1(block_1v1_arg0:builtin.int <si32>,block_1v1_arg1:builtin.int <si32>):
+    op_2v1_res0 = clif.umax block_1v1_arg0,block_1v1_arg1:builtin.int <si32>;
+    clif.return (op_2v1_res0)
+}",
+            format!("{}", print_func)
+        );
+        }
+    }
+
+     /// Test converting a Cranelift function that implements integer subtraction (isub) to Pliron.
+     #[test]
+     fn test_sub_fn_convert_clif_to_pliron() {
+         let clif_code = r#"
+         function %sub(i32, i32) -> i32 apple_aarch64 {
+             block0(v0: i32, v1: i32):
+                 v2 = isub v0, v1
+                 return v2
+         }
+     "#;
+ 
+         let functions = parse_functions(clif_code).expect("Failed to parse .clif");
+ 
+         for func in functions {
+             let mut cctx = ConversionCtx::default();
+             let mut ctx = Context::new();
+             builtin::register(&mut ctx);
+             crate::register(&mut ctx);
+             let func_op = match convert_function(&mut ctx, &mut cctx, func) {
+                 Ok(op) => op,
+                 Err(e) => panic!("Error: {}", e),
+             };
+             let print_func = func_op.disp(&ctx);
+             println!("{}", print_func);
+             assert_eq!(
+                 "builtin.func @sub: builtin.function <(builtin.int <si32>, builtin.int <si32>)->(builtin.int <si32>)> \n{\
+ \n  ^entry_block_1v1(block_1v1_arg0:builtin.int <si32>,block_1v1_arg1:builtin.int <si32>):\
+ \n    op_2v1_res0 = clif.isub block_1v1_arg0,block_1v1_arg1:builtin.int <si32>;\
+ \n    clif.return (op_2v1_res0)\
+ \n}",
+                 format!("{}", print_func)
+             );
+         }
+     }
+ 
+     /// Test converting a Cranelift function that implements integer absolute value (iabs) to Pliron.
+     #[test]
+     fn test_abs_fn_convert_clif_to_pliron() {
+         let clif_code = r#"
+         function %abs(i32) -> i32 apple_aarch64 {
+             block0(v0: i32):
+                 v1 = iabs v0
+                 return v1
+         }
+     "#;
+ 
+         let functions = parse_functions(clif_code).expect("Failed to parse .clif");
+ 
+         for func in functions {
+             let mut cctx = ConversionCtx::default();
+             let mut ctx = Context::new();
+             builtin::register(&mut ctx);
+             crate::register(&mut ctx);
+             let func_op = match convert_function(&mut ctx, &mut cctx, func) {
+                 Ok(op) => op,
+                 Err(e) => panic!("Error: {}", e),
+             };
+             let print_func = func_op.disp(&ctx);
+             println!("{}", print_func);
+             assert_eq!(
+                 "builtin.func @abs: builtin.function <(builtin.int <si32>)->(builtin.int <si32>)> \n{\
+ \n  ^entry_block_1v1(block_1v1_arg0:builtin.int <si32>):\
+ \n    op_2v1_res0 = clif.iabs block_1v1_arg0;\
+ \n    clif.return (op_2v1_res0)\
+ \n}",
+                 format!("{}", print_func)
+             );
+         }
+     }
+ 
 }
