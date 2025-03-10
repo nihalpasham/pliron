@@ -9,7 +9,7 @@ use pliron::{
 use thiserror::Error;
 
 use pliron::{
-     // Import additional op interfaces and types needed for binary/unary arithmetic operations.
+    // Import additional op interfaces and types needed for binary/unary arithmetic operations.
     builtin::{
         op_interfaces::{OneResultInterface, SameOperandsAndResultType},
         types::{IntegerType, Signedness},
@@ -112,8 +112,6 @@ pub trait BinArithOp: SameOperandsAndResultType + OneResultInterface {
     }
 }
 
-
-
 /// -------------------------------------------------------------------------
 /// Unary Arithmetic Operation Trait
 /// -------------------------------------------------------------------------
@@ -125,7 +123,7 @@ pub trait BinArithOp: SameOperandsAndResultType + OneResultInterface {
 /// for creation and a `verify` method to enforce the operand count.
 #[op_interface]
 pub trait UnaryArithOp: SameOperandsType + SameResultsType + OneResultInterface {
-     /// Create a new unary arithmetic operation given a single operand.
+    /// Create a new unary arithmetic operation given a single operand.
     ///
     /// # Arguments
     ///
@@ -185,7 +183,7 @@ pub trait UnaryArithOp: SameOperandsType + SameResultsType + OneResultInterface 
 /// the operand and result types are signless integers.
 #[op_interface]
 pub trait IntUnaryArithOp: UnaryArithOp {
-     /// Verify that the operand and result types are signless integers.
+    /// Verify that the operand and result types are signless integers.
     ///
     /// # Arguments
     ///
@@ -218,8 +216,6 @@ pub trait IntUnaryArithOp: UnaryArithOp {
     }
 }
 
-
- 
 /// -------------------------------------------------------------------------
 /// Integer Binary Arithmetic Operation Trait
 /// -------------------------------------------------------------------------
