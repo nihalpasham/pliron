@@ -128,18 +128,21 @@ fn convert_instruction(
     cctx: &mut ConversionCtx,
     inst: Inst,
 ) -> Result<Ptr<Operation>> {
+    // Retrieve the instruction data for the given instruction.
     let inst_data = dfg.insts[inst];
 
     match inst_data {
         InstructionData::Brif { .. } => {
-            // If the instruction has a `destination` field, it's a block reference
+            // Conditional branch instructions (`brif`) are not yet implemented.
             todo!()
         }
         InstructionData::BranchTable { .. } => {
-            // `br_table` instructions use blocks
+            // Branch table (`br_table`) instructions, used for jump tables, are not yet implemented.
             todo!()
         }
         InstructionData::Jump { destination, .. } => {
+            // Convert a direct jump instruction.
+            // Extract the destination block and its arguments.
             let clif_block = destination.block(&dfg.value_lists);
             let clif_block_args = destination.args_slice(&dfg.value_lists);
 
