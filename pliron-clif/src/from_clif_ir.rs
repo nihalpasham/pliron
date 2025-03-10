@@ -222,7 +222,7 @@ fn convert_instruction(
     }
 }
 
-/// Converts a Cranelift basic block to a Pliron basic block using RPO conversion.
+/// Converts a Cranelift basic block to a Pliron basic block.
 ///
 /// This version does not use the conversion cache since RPO ordering ensures that operands are already
 /// converted in the proper order.
@@ -268,11 +268,7 @@ fn convert_block(
 ///
 /// # Returns
 /// A Result containing the converted [FuncOp] or an error if conversion fails.
-fn convert_function(
-    ctx: &mut Context,
-    cctx: &mut ConversionCtx,
-    func: Function,
-) -> Result<FuncOp> {
+fn convert_function(ctx: &mut Context, cctx: &mut ConversionCtx, func: Function) -> Result<FuncOp> {
     // Helper function to convert and link blocks and instructions within the function.
     fn convert_and_link(ctx: &mut Context, cctx: &mut ConversionCtx, func: Function) {
         let dfg = &func.dfg;
@@ -292,7 +288,7 @@ fn convert_function(
                     // the entry block should already be linked and inserted into the ConversionCtx.
                 }
                 _ => {
-                    // safe to unwrap since we are iterating in RPO order. 
+                    // safe to unwrap since we are iterating in RPO order.
                     // So, we can be certain that blocks have already been converted and cached.
                     bb = *cctx.bbs.get(&block).unwrap();
                     bb.insert_after(ctx, prev_bb);
