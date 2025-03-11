@@ -785,10 +785,15 @@ mod tests {
             };
             let print_func = func_op.disp(&ctx);
             println!("{}", print_func);
-            // assert_eq!(
-            //     "",
-            //     format!("{}", print_func)
-            // );
+            assert_eq!(
+                "builtin.func @call: builtin.function <(builtin.int <si32>)->(builtin.int <si32>)> 
+{
+  ^entry_block_1v1(block_1v1_arg0:builtin.int <si32>):
+    op_2v1_res0 = clif.call (block_1v1_arg0) [] [(builtin_callee_type: builtin.type <builtin.function <(builtin.int <si32>)->(builtin.int <si32>)>>), (clif_call_callee: builtin.identifier (g))]: <(builtin.int <si32>) -> (builtin.int <si32>)>;
+    clif.return (op_2v1_res0)
+}",
+                format!("{}", print_func)
+            );
         }
     }
 }
