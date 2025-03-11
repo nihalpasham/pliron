@@ -32,7 +32,7 @@ use rustc_hash::FxHashMap;
 // Import our own modules that define op interfaces and operations.
 use crate::{
     op_interfaces::{BinArithOp, UnaryArithOp},
-    ops::{IAddOp, ISubOp, IabsOp, InegOp, JumpOp, ReturnOp, UmaxOp, UminOp},
+    ops::{BrifOp, IAddOp, ISubOp, IabsOp, InegOp, JumpOp, ReturnOp, UmaxOp, UminOp},
 };
 
 /// Converts a Cranelift type ([ClifType]) to a Pliron type ([TypeObj]).
@@ -132,9 +132,32 @@ fn convert_instruction(
     let inst_data = dfg.insts[inst];
 
     match inst_data {
-        InstructionData::Brif { .. } => {
-            // Conditional branch instructions (`brif`) are not yet implemented.
-            todo!()
+        InstructionData::Brif { arg, blocks, .. } => {
+            // Convert a conditional branch instruction (`brif`).
+            let clif_then_block = blocks[0].block(&dfg.value_lists);
+            let clif_then_block_args = blocks[0].args_slice(&dfg.value_lists);
+
+            let clif_else_block = blocks[1].block(&dfg.value_lists);
+            let clif_else_block_args = blocks[1].args_slice(&dfg.value_lists);
+
+            let cond = convert_operands(dfg, cctx, &[arg])?;
+
+            let true_dest = convert_block(ctx, cctx, dfg, clif_then_block)?;
+            let true_dest_opds = convert_operands(dfg, cctx, &clif_then_block_args)?;
+
+            let false_dest = convert_block(ctx, cctx, dfg, clif_else_block)?;
+            let false_dest_opds = convert_operands(dfg, cctx, &clif_else_block_args)?;
+
+            let brif_op = BrifOp::new(
+                ctx,
+                cond[0],
+                true_dest,
+                true_dest_opds,
+                false_dest,
+                false_dest_opds,
+            );
+            let op = brif_op.get_operation();
+            return Ok(op);
         }
         InstructionData::BranchTable { .. } => {
             // Branch table (`br_table`) instructions, used for jump tables, are not yet implemented.
@@ -243,6 +266,10 @@ fn convert_block(
     dfg: &DataFlowGraph,
     block: ClifBasicBlock,
 ) -> Result<Ptr<BasicBlock>> {
+    // Check if we have already converted this block.
+    if let Some(pliron_block) = cctx.bbs.get(&block) {
+        return Ok(*pliron_block);
+    };
     // Create a new Pliron `BasicBlock` with a label and argument types
     let label = Identifier::try_new(format!("{}", block))?;
     let block_params = dfg.block_params(block);
@@ -637,6 +664,51 @@ mod tests {
   ^entry_block_1v1(block_1v1_arg0:builtin.int <si32>):
     op_2v1_res0 = clif.iadd block_1v1_arg0,block_1v1_arg0:builtin.int <si32>;
     clif.jump ^block1_block_2v1(op_2v1_res0)
+  ^block1_block_2v1(block_2v1_arg0:builtin.int <si32>):
+    clif.jump ^block2_block_3v1(block_2v1_arg0)
+  ^block2_block_3v1(block_3v1_arg0:builtin.int <si32>):
+    clif.return (block_3v1_arg0)
+}",
+                format!("{}", print_func)
+            );
+        }
+    }
+
+    /// Test converting a Cranelift function that implements conditional branches or `brif`s to Pliron.
+    ///
+    #[test]
+    fn test_brif_fn_convert_clif_to_pliron() {
+        let clif_code = r#"
+        function %brif(i32, i32, i32) -> i32 {
+            block0(v0: i32, v1: i32, v2: i32):
+                brif v0, block1(v1), block2(v2)
+
+            block1(v3: i32):
+                jump block2(v3)
+
+            block2(v4: i32):
+                return v4
+        }
+     "#;
+
+        let functions = parse_functions(clif_code).expect("Failed to parse .clif");
+
+        for func in functions {
+            let mut cctx = ConversionCtx::default();
+            let mut ctx = Context::new();
+            builtin::register(&mut ctx);
+            crate::register(&mut ctx);
+            let func_op = match convert_function(&mut ctx, &mut cctx, func) {
+                Ok(op) => op,
+                Err(e) => panic!("Error: {}", e),
+            };
+            let print_func = func_op.disp(&ctx);
+            println!("{}", print_func);
+            assert_eq!(
+                "builtin.func @brif: builtin.function <(builtin.int <si32>, builtin.int <si32>, builtin.int <si32>)->(builtin.int <si32>)> 
+{
+  ^entry_block_1v1(block_1v1_arg0:builtin.int <si32>,block_1v1_arg1:builtin.int <si32>,block_1v1_arg2:builtin.int <si32>):
+    clif.brif if block_1v1_arg0 ^block1_block_2v1(block_1v1_arg1) else ^block2_block_3v1(block_1v1_arg2)
   ^block1_block_2v1(block_2v1_arg0:builtin.int <si32>):
     clif.jump ^block2_block_3v1(block_2v1_arg0)
   ^block2_block_3v1(block_3v1_arg0:builtin.int <si32>):

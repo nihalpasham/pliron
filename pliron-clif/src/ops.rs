@@ -288,7 +288,7 @@ impl JumpOp {
 /// ### Operands
 /// | operand           |                description                |
 /// |-----|-------------|
-/// | `condition`       | 1-bit signless integer                    |
+/// | `condition`       | any CLIF integer type                     |
 /// | `true_dest_opds`  | Any number of operands with any CLIF type |
 /// | `false_dest_opds` | Any number of operands with any CLIF type |
 ///
