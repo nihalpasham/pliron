@@ -3,7 +3,7 @@
 use pliron::{
     basic_block::BasicBlock,
     builtin::{
-        op_interfaces::OneRegionInterface,
+        op_interfaces::{CallOpCallable, OneRegionInterface},
         ops::FuncOp,
         types::{FunctionType, IntegerType, Signedness},
     },
@@ -32,7 +32,7 @@ use rustc_hash::FxHashMap;
 // Import our own modules that define op interfaces and operations.
 use crate::{
     op_interfaces::{BinArithOp, UnaryArithOp},
-    ops::{BrifOp, IAddOp, ISubOp, IabsOp, InegOp, JumpOp, ReturnOp, UmaxOp, UminOp},
+    ops::{BrifOp, CallOp, IAddOp, ISubOp, IabsOp, InegOp, JumpOp, ReturnOp, UmaxOp, UminOp},
 };
 
 /// Converts a Cranelift type ([ClifType]) to a Pliron type ([TypeObj]).
@@ -174,6 +174,45 @@ fn convert_instruction(
 
             let jump_op = JumpOp::new(ctx, dest, dest_opds);
             let op = jump_op.get_operation();
+            return Ok(op);
+        }
+        InstructionData::Call { args, func_ref, .. } => {
+            // Convert a direct call instruction. (i.e. a call to a statically known function)
+            // Extract the function arguments and convert them.
+            let clif_args_slice = args.as_slice(&dfg.value_lists);
+            let args = convert_operands(dfg, cctx, &clif_args_slice)?;
+
+            // Extract the function name and instantiate a CallOpCallable. (Direct call)
+            let ext_name = dfg.ext_funcs[func_ref].name.clone();
+            let displayable_name = ext_name.display(None).to_string().split_off(1);
+            let callee = CallOpCallable::Direct(
+                Identifier::try_new(format!("{}", displayable_name)).unwrap(),
+            );
+            // Extract the function signature and convert to Pliron `FunctionType`.
+            let sig_ref = dfg.ext_funcs[func_ref].signature.clone();
+            let func_sig = dfg.signatures[sig_ref].clone();
+
+            // Convert function signature (name, params, return types)
+            let func_params_types: Vec<_> = func_sig
+                .params
+                .iter()
+                .map(|param| {
+                    convert_type(ctx, param.value_type)
+                        .expect("Failed to convert Clif Function Parameter Type")
+                })
+                .collect();
+            let func_return_types: Vec<_> = func_sig
+                .returns
+                .iter()
+                .map(|ret| {
+                    convert_type(ctx, ret.value_type)
+                        .expect("Failed to convert Clif Function Return Type")
+                })
+                .collect();
+            let callee_ty = FunctionType::get(ctx, func_params_types, func_return_types);
+
+            let call_op = CallOp::new(ctx, callee, callee_ty, args);
+            let op = call_op.get_operation();
             return Ok(op);
         }
         _ => {
@@ -716,6 +755,40 @@ mod tests {
 }",
                 format!("{}", print_func)
             );
+        }
+    }
+
+    /// Test converting a Cranelift function that implements a `direct call`
+    /// (for statically known functions) to Pliron.
+    #[test]
+    fn test_call_fn_convert_clif_to_pliron() {
+        let clif_code = r#"
+        function %call(i32) -> i32 {
+            fn0 = %g(i32) -> i32
+
+            block0(v0: i32):
+                v1 = call fn0(v0)
+                return v1
+        }
+     "#;
+
+        let functions = parse_functions(clif_code).expect("Failed to parse .clif");
+
+        for func in functions {
+            let mut cctx = ConversionCtx::default();
+            let mut ctx = Context::new();
+            builtin::register(&mut ctx);
+            crate::register(&mut ctx);
+            let func_op = match convert_function(&mut ctx, &mut cctx, func) {
+                Ok(op) => op,
+                Err(e) => panic!("Error: {}", e),
+            };
+            let print_func = func_op.disp(&ctx);
+            println!("{}", print_func);
+            // assert_eq!(
+            //     "",
+            //     format!("{}", print_func)
+            // );
         }
     }
 }

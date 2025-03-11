@@ -4,10 +4,12 @@
 //! It includes both binary and unary arithmetic operations along with a return operation.
 
 use combine::Parser;
+use pliron::builtin::attributes::{IdentifierAttr, TypeAttr};
+use pliron::builtin::types::FunctionType;
 use pliron::common_traits::Named;
 use pliron::derive::{def_op, derive_op_interface_impl, op_interface_impl};
 
-use pliron::builtin::op_interfaces;
+use pliron::builtin::op_interfaces::{self, CallOpCallable, CallOpInterface, ATTR_KEY_CALLEE_TYPE};
 use pliron::identifier::Identifier;
 use pliron::irfmt::parsers::{
     block_opd_parser, delimited_list_parser, process_parsed_ssa_defs, spaced, ssa_opd_parser,
@@ -17,6 +19,7 @@ use pliron::location::{Located, Location};
 use pliron::op::OpObj;
 use pliron::parsable::{IntoParseResult, Parsable, ParseResult, StateStream};
 use pliron::printable::Printable;
+use pliron::r#type::TypePtr;
 use pliron::{
     basic_block::BasicBlock,
     builtin::op_interfaces::{
@@ -30,7 +33,7 @@ use pliron::{
     operation::Operation,
     value::Value,
 };
-use pliron::{input_err, irfmt};
+use pliron::{impl_canonical_syntax, input_err, irfmt};
 
 use crate::op_interfaces::{BinArithOp, IntBinArithOp, IntUnaryArithOp, UnaryArithOp};
 
@@ -457,6 +460,98 @@ impl BranchOpInterface for BrifOp {
     }
 }
 
+/// Equivalent to Clif's `call` opcode.
+/// ### Operands
+/// | operand           |                        description                             |
+/// |-------------------|----------------------------------------------------------------|
+/// | `callee_operands` | Optional function pointer followed by any number of parameters |
+///
+////// ### Result(s):
+///
+/// | result      | description |
+/// |-------------|-------------|
+/// | `res`       | Clif type   |
+///
+/// ### Attributes:
+/// |                                   key                                        |    value        |   via Interface   |
+/// |------------------------------------------------------------------------------|-----------------| ------------------|
+/// | [ATTR_KEY_CALLEE](call_op::ATTR_KEY_CALLEE)                                  | [IdentifierAttr] | N/A               |
+/// | [ATTR_KEY_CALLEE_TYPE](pliron::builtin::op_interfaces::ATTR_KEY_CALLEE_TYPE) | [TypeAttr]      | [CallOpInterface] |
+///
+#[def_op("clif.call")]
+#[derive_op_interface_impl(OneResultInterface)]
+pub struct CallOp;
+
+pub mod call_op {
+    use std::sync::LazyLock;
+
+    use super::*;
+    pub static ATTR_KEY_CALLEE: LazyLock<Identifier> =
+        LazyLock::new(|| "clif_call_callee".try_into().unwrap());
+}
+
+impl CallOp {
+    /// Get a new [CallOp].
+    pub fn new(
+        ctx: &mut Context,
+        callee: CallOpCallable,
+        callee_ty: TypePtr<FunctionType>,
+        mut args: Vec<Value>,
+    ) -> Self {
+        let res_ty = callee_ty.deref(ctx).get_results()[0];
+        let op = match callee {
+            CallOpCallable::Direct(cval) => {
+                let op =
+                    Operation::new(ctx, Self::get_opid_static(), vec![res_ty], args, vec![], 0);
+                op.deref_mut(ctx)
+                    .attributes
+                    .set(call_op::ATTR_KEY_CALLEE.clone(), IdentifierAttr::new(cval));
+                op
+            }
+            CallOpCallable::Indirect(csym) => {
+                args.insert(0, csym);
+                Operation::new(ctx, Self::get_opid_static(), vec![res_ty], args, vec![], 0)
+            }
+        };
+        op.deref_mut(ctx).attributes.set(
+            ATTR_KEY_CALLEE_TYPE.clone(),
+            TypeAttr::new(callee_ty.into()),
+        );
+        CallOp { op }
+    }
+}
+
+impl CallOpInterface for CallOp {
+    fn callee(&self, ctx: &Context) -> CallOpCallable {
+        let op = self.op.deref(ctx);
+        if let Some(callee_sym) = op
+            .attributes
+            .get::<IdentifierAttr>(&call_op::ATTR_KEY_CALLEE)
+        {
+            CallOpCallable::Direct(callee_sym.clone().into())
+        } else {
+            assert!(
+                op.get_num_operands() > 0,
+                "Indirect call must have function pointer operand"
+            );
+            CallOpCallable::Indirect(op.get_operand(0))
+        }
+    }
+
+    fn args(&self, ctx: &Context) -> Vec<Value> {
+        let op = self.op.deref(ctx);
+        // If this is an indirect call, the first operand is the callee value.
+        let skip = if matches!(self.callee(ctx), CallOpCallable::Direct(_)) {
+            0
+        } else {
+            1
+        };
+        op.operands().skip(skip).collect()
+    }
+}
+impl_canonical_syntax!(CallOp);
+impl_verify_succ!(CallOp);
+
 /// -------------------------------------------------------------------------
 /// Registration Function
 /// -------------------------------------------------------------------------
@@ -473,4 +568,5 @@ pub fn register(ctx: &mut Context) {
     IabsOp::register(ctx, IabsOp::parser_fn);
     JumpOp::register(ctx, JumpOp::parser_fn);
     BrifOp::register(ctx, BrifOp::parser_fn);
+    CallOp::register(ctx, CallOp::parser_fn);
 }
