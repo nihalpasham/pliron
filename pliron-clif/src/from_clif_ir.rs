@@ -31,8 +31,12 @@ use rustc_hash::FxHashMap;
 
 // Import our own modules that define op interfaces and operations.
 use crate::{
+    attributes::MemFlagsAttr,
     op_interfaces::{BinArithOp, UnaryArithOp},
-    ops::{BrifOp, CallOp, IAddOp, ISubOp, IabsOp, InegOp, JumpOp, ReturnOp, UmaxOp, UminOp},
+    ops::{
+        load_op, BrifOp, CallOp, IAddOp, ISubOp, IabsOp, InegOp, JumpOp, LoadOp, ReturnOp, UmaxOp,
+        UminOp,
+    },
 };
 
 /// Converts a Cranelift type ([ClifType]) to a Pliron type ([TypeObj]).
@@ -52,6 +56,10 @@ fn convert_type(ctx: &mut Context, ty: ClifType) -> Result<Ptr<TypeObj>> {
     match ty.to_string().as_str() {
         "i32" => {
             let pliron_int_type_ptr = IntegerType::get(ctx, 32, Signedness::Signed);
+            return Ok(pliron_int_type_ptr.to_ptr());
+        }
+        "i64" => {
+            let pliron_int_type_ptr = IntegerType::get(ctx, 64, Signedness::Signed);
             return Ok(pliron_int_type_ptr.to_ptr());
         }
         _ => unimplemented!("Type {:?} is not implemented", ty),
@@ -132,6 +140,32 @@ fn convert_instruction(
     let inst_data = dfg.insts[inst];
 
     match inst_data {
+        InstructionData::Load {
+            flags, arg, offset, ..
+        } => {
+            let results = dfg.inst_results(inst);
+            let result_type = match results.first().map(|&val| dfg.value_type(val)) {
+                Some(ty) => convert_type(ctx, ty)?,
+                None => unreachable!(), // We should always have a result type for load instructions.
+            };
+
+            let flags = flags.to_string();
+            let flags_attr = match flags.as_str() {
+                "aligned" => MemFlagsAttr::Aligned,
+                "readonly" => MemFlagsAttr::ReadOnly,
+                "little" => MemFlagsAttr::LittleEndian,
+                "big" => MemFlagsAttr::BigEndian,
+                "checked" => MemFlagsAttr::Checked,
+                "heap" | "table" | "vmctx" => MemFlagsAttr::AliasRegion,
+                "notrap" => MemFlagsAttr::TrapCode,
+                _ => MemFlagsAttr::Unallocated,
+            };
+            let ptr = convert_operands(dfg, cctx, &[arg])?;
+            let offset = i32::from(offset);
+            let load_op = LoadOp::new(ctx, flags_attr, ptr[0], offset, result_type);
+            let op = load_op.get_operation();
+            return Ok(op);
+        }
         InstructionData::Brif { arg, blocks, .. } => {
             // Convert a conditional branch instruction (`brif`).
             let clif_then_block = blocks[0].block(&dfg.value_lists);
@@ -791,6 +825,44 @@ mod tests {
   ^entry_block_1v1(block_1v1_arg0:builtin.int <si32>):
     op_2v1_res0 = clif.call (block_1v1_arg0) [] [(builtin_callee_type: builtin.type <builtin.function <(builtin.int <si32>)->(builtin.int <si32>)>>), (clif_call_callee: builtin.identifier (g))]: <(builtin.int <si32>) -> (builtin.int <si32>)>;
     clif.return (op_2v1_res0)
+}",
+                format!("{}", print_func)
+            );
+        }
+    }
+
+    /// Test converting a Cranelift function that contains a `load` instruction to Pliron.
+    #[test]
+    fn test_load_fn_convert_clif_to_pliron() {
+        let clif_code = r#"
+        function %load(i64, i32) -> i32 {
+            block0(v0: i64, v1: i32):
+            v2 = load.i32 v0
+            v3 = iadd.i32 v1, v2
+            return v3
+        }
+     "#;
+
+        let functions = parse_functions(clif_code).expect("Failed to parse .clif");
+
+        for func in functions {
+            let mut cctx = ConversionCtx::default();
+            let mut ctx = Context::new();
+            builtin::register(&mut ctx);
+            crate::register(&mut ctx);
+            let func_op = match convert_function(&mut ctx, &mut cctx, func) {
+                Ok(op) => op,
+                Err(e) => panic!("Error: {}", e),
+            };
+            let print_func = func_op.disp(&ctx);
+            println!("{}", print_func);
+            assert_eq!(
+                "builtin.func @load: builtin.function <(builtin.int <si64>, builtin.int <si32>)->(builtin.int <si32>)> 
+{
+  ^entry_block_1v1(block_1v1_arg0:builtin.int <si64>,block_1v1_arg1:builtin.int <si32>):
+    op_2v1_res0 = clif.load (block_1v1_arg0) [] [(clif_load_offset32: clif.offset32 <0>), (clif_memflag: clif.memflags Unallocated)]: <(builtin.int <si64>) -> (builtin.int <si32>)>;
+    op_3v1_res0 = clif.iadd block_1v1_arg1,op_2v1_res0:builtin.int <si32>;
+    clif.return (op_3v1_res0)
 }",
                 format!("{}", print_func)
             );

@@ -3,39 +3,48 @@
 //! This module defines a set of operations (ops) that mirror the CLIF dialect using the Pliron framework.
 //! It includes both binary and unary arithmetic operations along with a return operation.
 
-use combine::Parser;
-use pliron::builtin::attributes::{IdentifierAttr, TypeAttr};
-use pliron::builtin::types::FunctionType;
-use pliron::common_traits::Named;
-use pliron::derive::{def_op, derive_op_interface_impl, op_interface_impl};
-
-use pliron::builtin::op_interfaces::{self, CallOpCallable, CallOpInterface, ATTR_KEY_CALLEE_TYPE};
-use pliron::identifier::Identifier;
-use pliron::irfmt::parsers::{
-    block_opd_parser, delimited_list_parser, process_parsed_ssa_defs, spaced, ssa_opd_parser,
-};
-use pliron::irfmt::printers::iter_with_sep;
-use pliron::location::{Located, Location};
-use pliron::op::OpObj;
-use pliron::parsable::{IntoParseResult, Parsable, ParseResult, StateStream};
-use pliron::printable::Printable;
-use pliron::r#type::TypePtr;
 use pliron::{
     basic_block::BasicBlock,
-    builtin::op_interfaces::{
-        BranchOpInterface, IsTerminatorInterface, OneResultInterface, SameOperandsAndResultType,
-        SameOperandsType, SameResultsType, ZeroResultInterface,
+    builtin::{
+        attributes::{IdentifierAttr, TypeAttr},
+        op_interfaces::{
+            self, BranchOpInterface, CallOpCallable, CallOpInterface, IsTerminatorInterface,
+            OneOpdInterface, OneResultInterface, SameOperandsAndResultType, SameOperandsType,
+            SameResultsType, ZeroResultInterface, ATTR_KEY_CALLEE_TYPE,
+        },
+        types::{FunctionType, IntegerType},
     },
+    common_traits::{Named, Verify},
     context::{Context, Ptr},
-    derive::format_op,
-    impl_verify_succ,
-    op::Op,
+    derive::{def_op, derive_op_interface_impl, format_op, op_interface_impl},
+    identifier::Identifier,
+    impl_canonical_syntax, impl_verify_succ, input_err,
+    irfmt::{
+        self,
+        parsers::{
+            block_opd_parser, delimited_list_parser, process_parsed_ssa_defs, spaced,
+            ssa_opd_parser,
+        },
+        printers::iter_with_sep,
+    },
+    location::{Located, Location},
+    op::{Op, OpObj},
     operation::Operation,
+    parsable::{IntoParseResult, Parsable, ParseResult, StateStream},
+    printable::Printable,
+    r#type::{TypeObj, TypePtr},
+    result::Result,
     value::Value,
+    verify_err,
 };
-use pliron::{impl_canonical_syntax, input_err, irfmt};
 
-use crate::op_interfaces::{BinArithOp, IntBinArithOp, IntUnaryArithOp, UnaryArithOp};
+use combine::Parser;
+use thiserror::Error;
+
+use crate::{
+    attributes::{MemFlagsAttr, Offset32Attr},
+    op_interfaces::{BinArithOp, IntBinArithOp, IntUnaryArithOp, TwoOpdInterface, UnaryArithOp},
+};
 
 /// -------------------------------------------------------------------------
 /// ReturnOp
@@ -241,7 +250,7 @@ new_int_unary_op!(
 
 // Define the integer absolute value op (`clif.iabs`).
 new_int_unary_op!(
-    /// Equivalent to CLIF's integer negation (`ineg`) opcode.
+    /// Equivalent to CLIF's integer absolute (`iabs`) opcode.
     IabsOp,
     "clif.iabs"
 );
@@ -552,6 +561,79 @@ impl CallOpInterface for CallOp {
 impl_canonical_syntax!(CallOp);
 impl_verify_succ!(CallOp);
 
+pub mod load_op {
+    use std::sync::LazyLock;
+
+    use super::*;
+    /// [Attribute](pliron::attribute::Attribute) to get the 32-bit offset for the load.
+    pub static ATTR_KEY_OFFSET: LazyLock<Identifier> =
+        LazyLock::new(|| "clif_load_offset32".try_into().unwrap());
+    /// [Attribute](pliron::attribute::Attribute) to get memory flags associated with the load.
+    pub static ATTR_KEY_MEM_FLAG: LazyLock<Identifier> =
+        LazyLock::new(|| "clif_memflag".try_into().unwrap());
+}
+
+#[derive(Error, Debug)]
+pub enum LoadOpVerifyErr {
+    #[error("load operand must be an integer")]
+    OperandTypeErr,
+}
+
+/// Equivalent to CLIF's Load opcode.
+/// ### Operands
+/// | operand     | description        |
+/// |-------------|--------------------|
+/// | `addr`      | [IntegerType] addr |
+///
+/// ### Result(s):
+///
+/// | result | description     |
+/// |--------|-----------------|
+/// | `res`  | sized CLIF type |
+///
+/// ### Attributes:
+///
+#[def_op("clif.load")]
+#[derive_op_interface_impl(OneResultInterface, OneOpdInterface)]
+pub struct LoadOp;
+impl LoadOp {
+    /// Create a new [LoadOp]
+    pub fn new(
+        ctx: &mut Context,
+        mem_flag: MemFlagsAttr,
+        addr: Value,
+        offset: i32,
+        res_ty: Ptr<TypeObj>,
+    ) -> Self {
+        let op = Operation::new(
+            ctx,
+            Self::get_opid_static(),
+            vec![res_ty],
+            vec![addr],
+            vec![],
+            0,
+        );
+        op.deref_mut(ctx)
+            .attributes
+            .set(load_op::ATTR_KEY_OFFSET.clone(), Offset32Attr(offset));
+        op.deref_mut(ctx)
+            .attributes
+            .set(load_op::ATTR_KEY_MEM_FLAG.clone(), mem_flag);
+        LoadOp { op }
+    }
+}
+impl_canonical_syntax!(LoadOp);
+impl Verify for LoadOp {
+    fn verify(&self, ctx: &Context) -> Result<()> {
+        let loc = self.get_operation().deref(ctx).loc();
+        // Ensure correctness of operand type.
+        if !(self.operand_type(ctx).deref(ctx).is::<IntegerType>()) {
+            return verify_err!(loc, LoadOpVerifyErr::OperandTypeErr);
+        }
+        Ok(())
+    }
+}
+
 /// -------------------------------------------------------------------------
 /// Registration Function
 /// -------------------------------------------------------------------------
@@ -569,4 +651,5 @@ pub fn register(ctx: &mut Context) {
     JumpOp::register(ctx, JumpOp::parser_fn);
     BrifOp::register(ctx, BrifOp::parser_fn);
     CallOp::register(ctx, CallOp::parser_fn);
+    LoadOp::register(ctx, LoadOp::parser_fn);
 }

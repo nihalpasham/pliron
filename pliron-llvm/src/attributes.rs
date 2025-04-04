@@ -54,7 +54,6 @@ pub enum GepIndexAttr {
     /// [Operation](pliron::operation::Operation)s `operands[idx]`
     OperandIdx(usize),
 }
-
 #[def_attribute("llvm.gep_indices")]
 #[format_attribute("`[` vec($0, CharSpace(`,`)) `]`")]
 #[derive(PartialEq, Eq, Clone, Debug)]

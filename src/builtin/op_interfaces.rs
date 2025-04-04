@@ -357,7 +357,7 @@ pub trait ZeroOpdInterface {
 #[error("Op must have exactly one operand")]
 pub struct OneOpdVerifyErr(String);
 
-/// An [Op] having no operands.
+/// An [Op] having exactly one operand.
 #[op_interface]
 pub trait OneOpdInterface {
     /// Get the single operand used by this [Op].

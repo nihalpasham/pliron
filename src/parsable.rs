@@ -487,3 +487,15 @@ impl Parsable for u32 {
         int_parser::<u32>().parse_stream(state_stream).into()
     }
 }
+
+impl Parsable for i32 {
+    type Arg = ();
+    type Parsed = i32;
+
+    fn parse<'a>(
+        state_stream: &mut StateStream<'a>,
+        _arg: Self::Arg,
+    ) -> ParseResult<'a, Self::Parsed> {
+        int_parser::<i32>().parse_stream(state_stream).into()
+    }
+}

@@ -3,7 +3,9 @@
 // - `op_interface` is a macro to derive op interface implementations.
 use pliron::{
     builtin::op_interfaces::{SameOperandsType, SameResultsType},
+    context::Ptr,
     derive::op_interface,
+    r#type::TypeObj,
 };
 // Import the `Error` derive macro from the thiserror crate.
 use thiserror::Error;
@@ -255,6 +257,43 @@ pub trait IntBinArithOp: BinArithOp {
             return verify_err!(op.get_operation().deref(ctx).loc(), IntBinArithOpErr);
         }
 
+        Ok(())
+    }
+}
+
+#[derive(Error, Debug)]
+#[error("Op must have exactly two operands")]
+pub struct TwoOpdVerifyErr(String);
+
+/// An [Op] having exactly two operands.
+#[op_interface]
+pub trait TwoOpdInterface {
+    /// Get the first operand used by this [Op].
+    fn get_first_operand(&self, ctx: &Context) -> Value {
+        self.get_operation().deref(ctx).get_operand(0)
+    }
+    /// Get the second operand used by this [Op].
+    fn get_second_operand(&self, ctx: &Context) -> Value {
+        self.get_operation().deref(ctx).get_operand(1)
+    }
+
+    /// Get the type of the first operand used by this [Op].
+    fn first_operand_type(&self, ctx: &Context) -> Ptr<TypeObj> {
+        self.get_first_operand(ctx).get_type(ctx)
+    }
+    /// Get the type of the second operand used by this [Op].
+    fn second_operand_type(&self, ctx: &Context) -> Ptr<TypeObj> {
+        self.get_second_operand(ctx).get_type(ctx)
+    }
+
+    fn verify(op: &dyn Op, ctx: &Context) -> Result<()>
+    where
+        Self: Sized,
+    {
+        let op = &*op.get_operation().deref(ctx);
+        if op.get_num_operands() != 2 {
+            return verify_err!(op.loc(), TwoOpdVerifyErr(op.get_opid().to_string()));
+        }
         Ok(())
     }
 }
