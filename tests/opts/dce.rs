@@ -5,13 +5,11 @@ use pliron::{
     basic_block::BasicBlock,
     context::{Context, Ptr},
     init_env_logger_for_tests,
+    irbuild::IRStatus,
     irfmt::parsers::spaced,
     op::Op,
     operation::{Operation, verify_operation},
-    opts::{
-        OptStatus,
-        dce::{BlockArgRemoval, dce},
-    },
+    opts::dce::{BlockArgRemoval, dce},
     parsable::{self, state_stream_from_iterator},
     printable::Printable,
     result::Result,
@@ -85,7 +83,7 @@ impl SideEffects for MultiUseSinkOp {
     }
 }
 
-fn run_dce_on_text(input: &str) -> Result<(OptStatus, String, String)> {
+fn run_dce_on_text(input: &str) -> Result<(IRStatus, String, String)> {
     init_env_logger_for_tests!();
     let ctx = &mut Context::new();
     let state_stream = state_stream_from_iterator(
@@ -121,7 +119,7 @@ fn dce_removes_dead_llvm_constant() -> Result<()> {
   "#;
 
     let (status, _before, after) = run_dce_on_text(input)?;
-    assert_eq!(status, OptStatus::IRChanged);
+    assert_eq!(status, IRStatus::Changed);
     assert!(!after.contains("<0: si64>"));
     assert!(after.contains("<7: si64>"));
     Ok(())
@@ -138,7 +136,7 @@ fn dce_keeps_live_llvm_constant() -> Result<()> {
   "#;
 
     let (status, _before, after) = run_dce_on_text(input)?;
-    assert_eq!(status, OptStatus::IRUnchanged);
+    assert_eq!(status, IRStatus::Unchanged);
     assert!(after.contains("<9: si64>"));
     Ok(())
 }
@@ -154,7 +152,7 @@ fn dce_does_not_remove_unused_entry_block_arg_in_llvm_func() -> Result<()> {
   "#;
 
     let (status, _before, after) = run_dce_on_text(input)?;
-    assert_eq!(status, OptStatus::IRUnchanged);
+    assert_eq!(status, IRStatus::Unchanged);
     assert!(after.contains("(arg0"));
     Ok(())
 }
@@ -174,7 +172,7 @@ fn dce_removes_dead_non_entry_block_arg_and_br_operand() -> Result<()> {
   "#;
 
     let (status, _before, after) = run_dce_on_text(input)?;
-    assert_eq!(status, OptStatus::IRChanged);
+    assert_eq!(status, IRStatus::Changed);
     assert!(!after.contains("(arg0"));
     assert!(!after.contains("<1: si64>"));
     Ok(())
@@ -194,7 +192,7 @@ fn dce_keeps_used_non_entry_block_arg() -> Result<()> {
   "#;
 
     let (status, _before, after) = run_dce_on_text(input)?;
-    assert_eq!(status, OptStatus::IRUnchanged);
+    assert_eq!(status, IRStatus::Unchanged);
     assert!(after.contains("(arg0"));
     Ok(())
 }
@@ -216,7 +214,7 @@ fn dce_dead_arg_cascades_to_successor_operands() -> Result<()> {
   "#;
 
     let (status, _before, after) = run_dce_on_text(input)?;
-    assert_eq!(status, OptStatus::IRChanged);
+    assert_eq!(status, IRStatus::Changed);
     // Live constant should remain
     assert!(after.contains("<42: si64>"));
     // Dead constant should be eliminated
@@ -252,7 +250,7 @@ fn dce_multiple_preds_mixed_dead_live_operands() -> Result<()> {
   "#;
 
     let (status, _before, after) = run_dce_on_text(input)?;
-    assert_eq!(status, OptStatus::IRChanged);
+    assert_eq!(status, IRStatus::Changed);
     // Live constant should remain
     assert!(after.contains("<10: si64>"));
     assert!(after.contains("<20: si64>"));
@@ -284,7 +282,7 @@ fn dce_all_successor_operands_dead() -> Result<()> {
   "#;
 
     let (status, _before, after) = run_dce_on_text(input)?;
-    assert_eq!(status, OptStatus::IRChanged);
+    assert_eq!(status, IRStatus::Changed);
     // Both dead constants should be eliminated
     assert!(!after.contains("<7: si64>"));
     assert!(!after.contains("<8: si64>"));
@@ -314,7 +312,7 @@ fn dce_chain_of_dead_computations() -> Result<()> {
   "#;
 
     let (status, _before, after) = run_dce_on_text(input)?;
-    assert_eq!(status, OptStatus::IRChanged);
+    assert_eq!(status, IRStatus::Changed);
     // Live constant should remain
     assert!(after.contains("<99: si64>"));
     // All dead constants should be eliminated
@@ -380,7 +378,7 @@ fn dce_region_containing_dead_op_safely_ignores_inner_dead_code() -> Result<()> 
     // 3. Mark test.pure_region as dead (no uses, no side effects)
     // 4. Eliminate all safely without panicking on inner dead ops
     let status = dce(func_op, ctx)?;
-    assert!(status == OptStatus::IRChanged);
+    assert!(status == IRStatus::Changed);
 
     verify_operation(func_op, ctx)?;
     let after = func_op.disp(ctx).to_string();
@@ -423,7 +421,7 @@ fn dce_eliminates_multi_result_op_after_same_op_and_successor_uses_die() -> Resu
   "#;
 
     let (status, before, after) = run_dce_on_text(input)?;
-    assert_eq!(status, OptStatus::IRChanged);
+    assert_eq!(status, IRStatus::Changed);
 
     assert!(before.contains("test.multi_result_def"));
     assert!(before.contains("test.multi_use_sink"));

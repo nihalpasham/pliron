@@ -12,6 +12,7 @@ use crate::{
     context::{Context, Ptr},
     graph::walkers::{IRNode, WALKCONFIG_PREORDER_FORWARD, uninterruptible::immutable::walk_op},
     irbuild::{
+        IRStatus,
         inserter::{Inserter, OpInsertionPoint},
         listener::{Recorder, RecorderEvent},
         rewriter::{IRRewriter, Rewriter},
@@ -163,7 +164,7 @@ pub fn apply_dialect_conversion<C: DialectConversion>(
     ctx: &mut Context,
     conversion: &mut C,
     op: Ptr<Operation>,
-) -> Result<()> {
+) -> Result<IRStatus> {
     #[derive(Clone, Copy, PartialEq, Eq)]
     enum OpState {
         Queued,
@@ -476,5 +477,6 @@ pub fn apply_dialect_conversion<C: DialectConversion>(
     }
 
     let mut driver = Driver::new(conversion);
-    driver.run(ctx, op)
+    driver.run(ctx, op)?;
+    Ok(driver.rewriter.is_modified().into())
 }

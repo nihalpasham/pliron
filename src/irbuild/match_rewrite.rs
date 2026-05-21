@@ -9,9 +9,10 @@ use crate::{
     context::{Context, Ptr},
     graph::walkers::{IRNode, WALKCONFIG_PREORDER_FORWARD, uninterruptible::immutable::walk_op},
     irbuild::{
+        IRStatus,
         inserter::{Inserter, OpInsertionPoint},
         listener::{Recorder, RecorderEvent},
-        rewriter::IRRewriter,
+        rewriter::{IRRewriter, Rewriter},
     },
     operation::Operation,
     result::Result,
@@ -40,7 +41,7 @@ pub fn apply_match_rewrite<M: MatchRewrite>(
     ctx: &mut Context,
     mut match_rewrite: M,
     op: Ptr<Operation>,
-) -> Result<()> {
+) -> Result<IRStatus> {
     let mut to_rewrite = VecDeque::new();
 
     // Collect all operations that match.
@@ -129,5 +130,5 @@ pub fn apply_match_rewrite<M: MatchRewrite>(
         }
         listener.clear();
     }
-    Ok(())
+    Ok(rewriter.is_modified().into())
 }

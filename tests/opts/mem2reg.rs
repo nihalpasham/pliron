@@ -6,12 +6,10 @@ use pliron::{
     context::Context,
     derive::pliron_op,
     init_env_logger_for_tests,
+    irbuild::IRStatus,
     irfmt::parsers::spaced,
     operation::{Operation, verify_operation},
-    opts::{
-        OptStatus,
-        mem2reg::{AllocInfo, PromotableOpInterface, PromotableOpKind, mem2reg},
-    },
+    opts::mem2reg::{AllocInfo, PromotableOpInterface, PromotableOpKind, mem2reg},
     parsable::{self, state_stream_from_iterator},
     printable::Printable,
     result::Result,
@@ -68,7 +66,7 @@ impl PromotableOpInterface for NonPromotableUseOp {
     }
 }
 
-fn run_mem2reg(input: &str) -> Result<(OptStatus, String, String)> {
+fn run_mem2reg(input: &str) -> Result<(IRStatus, String, String)> {
     init_env_logger_for_tests!();
     let ctx = &mut Context::new();
     let state_stream = state_stream_from_iterator(
@@ -109,7 +107,7 @@ fn mem2reg_basic_store_and_load() -> Result<()> {
   "#;
 
     let (status, _before, after) = run_mem2reg(input)?;
-    assert_eq!(status, OptStatus::IRChanged);
+    assert_eq!(status, IRStatus::Changed);
     // Alloca should be removed
     assert!(!after.contains("llvm.alloca"));
     // Store should be removed
@@ -138,7 +136,7 @@ fn mem2reg_multiple_stores_one_load() -> Result<()> {
   "#;
 
     let (status, _before, after) = run_mem2reg(input)?;
-    assert_eq!(status, OptStatus::IRChanged);
+    assert_eq!(status, IRStatus::Changed);
     // Should contain the final stored value
     assert!(after.contains("<42: i64>"));
     // Alloca and stores removed
@@ -162,7 +160,7 @@ fn mem2reg_no_store_uses_default() -> Result<()> {
   "#;
 
     let (status, _before, after) = run_mem2reg(input)?;
-    assert_eq!(status, OptStatus::IRChanged);
+    assert_eq!(status, IRStatus::Changed);
     // Alloca removed
     assert!(!after.contains("llvm.alloca"));
     // Load removed
@@ -189,7 +187,7 @@ fn mem2reg_no_load_dead_allocation() -> Result<()> {
   "#;
 
     let (status, _before, after) = run_mem2reg(input)?;
-    assert_eq!(status, OptStatus::IRChanged);
+    assert_eq!(status, IRStatus::Changed);
     // Alloca and store should be removed
     assert!(!after.contains("llvm.alloca"));
     assert!(!after.contains("llvm.store"));
@@ -224,7 +222,7 @@ fn mem2reg_phi_with_conditional_branch() -> Result<()> {
   "#;
 
     let (status, _before, after) = run_mem2reg(input)?;
-    assert_eq!(status, OptStatus::IRChanged);
+    assert_eq!(status, IRStatus::Changed);
     // Alloca removed
     assert!(!after.contains("llvm.alloca"));
     // Stores removed (phis created instead)
@@ -258,7 +256,7 @@ fn mem2reg_multiple_allocations() -> Result<()> {
   "#;
 
     let (status, _before, after) = run_mem2reg(input)?;
-    assert_eq!(status, OptStatus::IRChanged);
+    assert_eq!(status, IRStatus::Changed);
     // Both allocas removed
     assert!(!after.contains("llvm.alloca"));
     // All stores removed
@@ -287,7 +285,7 @@ fn mem2reg_linear_chain_of_stores_and_loads() -> Result<()> {
   "#;
 
     let (status, _before, after) = run_mem2reg(input)?;
-    assert_eq!(status, OptStatus::IRChanged);
+    assert_eq!(status, IRStatus::Changed);
     assert!(!after.contains("llvm.alloca"));
     assert!(!after.contains("llvm.store"));
     assert!(!after.contains("llvm.load"));
@@ -323,7 +321,7 @@ fn mem2reg_diamond_pattern() -> Result<()> {
   "#;
 
     let (status, _before, after) = run_mem2reg(input)?;
-    assert_eq!(status, OptStatus::IRChanged);
+    assert_eq!(status, IRStatus::Changed);
     assert!(!after.contains("llvm.alloca"));
     assert!(!after.contains("llvm.store"));
     assert!(!after.contains("llvm.load"));
@@ -369,7 +367,7 @@ fn mem2reg_nested_branches() -> Result<()> {
   "#;
 
     let (status, _before, after) = run_mem2reg(input)?;
-    assert_eq!(status, OptStatus::IRChanged);
+    assert_eq!(status, IRStatus::Changed);
     assert!(!after.contains("llvm.alloca"));
     assert!(!after.contains("llvm.store"));
     assert!(!after.contains("llvm.load"));
@@ -449,7 +447,7 @@ fn mem2reg_multiple_paths_convergence() -> Result<()> {
   "#;
 
     let (status, _before, after) = run_mem2reg(input)?;
-    assert_eq!(status, OptStatus::IRChanged);
+    assert_eq!(status, IRStatus::Changed);
     assert!(!after.contains("llvm.alloca"));
     assert!(!after.contains("llvm.store"));
     Ok(())
@@ -473,7 +471,7 @@ fn mem2reg_load_before_any_store() -> Result<()> {
   "#;
 
     let (status, _before, after) = run_mem2reg(input)?;
-    assert_eq!(status, OptStatus::IRChanged);
+    assert_eq!(status, IRStatus::Changed);
     assert!(!after.contains("llvm.alloca"));
     assert!(!after.contains("llvm.store"));
     assert!(!after.contains("llvm.load"));
@@ -514,7 +512,7 @@ fn mem2reg_complex_liveness() -> Result<()> {
   "#;
 
     let (status, _before, after) = run_mem2reg(input)?;
-    assert_eq!(status, OptStatus::IRChanged);
+    assert_eq!(status, IRStatus::Changed);
     assert!(!after.contains("llvm.alloca"));
     Ok(())
 }
@@ -574,7 +572,7 @@ fn mem2reg_repeated_forward_edges() -> Result<()> {
   "#;
 
     let (status, _before, after) = run_mem2reg(input)?;
-    assert_eq!(status, OptStatus::IRChanged);
+    assert_eq!(status, IRStatus::Changed);
     assert!(!after.contains("llvm.alloca"));
     Ok(())
 }
@@ -599,7 +597,7 @@ fn mem2reg_not_promoted_when_load_is_in_nested_region() -> Result<()> {
   "#;
 
     let (status, _before, after) = run_mem2reg(input)?;
-    assert_eq!(status, OptStatus::IRUnchanged);
+    assert_eq!(status, IRStatus::Unchanged);
     assert!(after.contains("llvm.alloca"));
     assert!(after.contains("llvm.load alloc"));
     Ok(())
@@ -625,7 +623,7 @@ fn mem2reg_not_promoted_when_store_is_in_nested_region() -> Result<()> {
   "#;
 
     let (status, _before, after) = run_mem2reg(input)?;
-    assert_eq!(status, OptStatus::IRUnchanged);
+    assert_eq!(status, IRStatus::Unchanged);
     assert!(after.contains("llvm.alloca"));
     assert!(after.contains("llvm.store *alloc"));
     assert!(after.contains("llvm.load alloc"));
@@ -649,7 +647,7 @@ fn mem2reg_not_promoted_for_interface_declared_non_promotable_use() -> Result<()
   "#;
 
     let (status, _before, after) = run_mem2reg(input)?;
-    assert_eq!(status, OptStatus::IRUnchanged);
+    assert_eq!(status, IRStatus::Unchanged);
     assert!(after.contains("llvm.alloca"));
     assert!(after.contains("test.non_promotable_use"));
     Ok(())
@@ -684,7 +682,7 @@ fn mem2reg_not_promoted_when_phi_pred_has_non_branch_successor_terminator() -> R
   "#;
 
     let (status, _before, after) = run_mem2reg(input)?;
-    assert_eq!(status, OptStatus::IRUnchanged);
+    assert_eq!(status, IRStatus::Unchanged);
     assert!(after.contains("llvm.alloca"));
     assert!(after.contains("llvm.load alloc"));
     assert!(after.contains("test.non_branch_succ_term"));

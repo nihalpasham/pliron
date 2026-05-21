@@ -35,6 +35,7 @@ use pliron::{
     context::{Context, Ptr},
     derive::op_interface_impl,
     irbuild::{
+        IRStatus,
         dialect_conversion::{
             DialectConversion, DialectConversionRewriter, OperandsInfo, apply_dialect_conversion,
         },
@@ -104,7 +105,7 @@ impl DialectConversion for KalToLLVM {
 ///
 /// Uses the [`DialectConversion`] infrastructure: each Kaleidoscope op
 /// implements [`ToLLVMDialect`] and knows how to lower itself to LLVM ops.
-pub fn lower_module(ctx: &mut Context, module: ModuleOp) -> Result<()> {
+pub fn lower_module(ctx: &mut Context, module: ModuleOp) -> Result<IRStatus> {
     apply_dialect_conversion(ctx, &mut KalToLLVM, module.get_operation())
 }
 // ANCHOR_END: lower_module
@@ -393,6 +394,7 @@ impl ToLLVMDialect for KalIfOp {
             ctx,
             pre_if_block,
             OpInsertionPoint::BeforeOperation(self.get_operation()),
+            Some("if_merge".try_into().unwrap()),
         );
 
         // Emit conditional branch in pre_if_block.
@@ -469,6 +471,7 @@ impl ToLLVMDialect for KalWhileOp {
             ctx,
             pre_while_block,
             OpInsertionPoint::BeforeOperation(self.get_operation()),
+            Some("while_exit".try_into().unwrap()),
         );
 
         // Create the header block.

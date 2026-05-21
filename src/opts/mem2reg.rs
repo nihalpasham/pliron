@@ -16,6 +16,7 @@ use crate::{
         dominance::{DomFrontierMap, DomTree, compute_dominator_tree},
         walkers::{IRNode, WALKCONFIG_PREORDER_FORWARD, uninterruptible::immutable::walk_op},
     },
+    irbuild::IRStatus,
     irbuild::{
         inserter::{IRInserter, Inserter},
         listener::{Recorder, RecorderEvent},
@@ -24,7 +25,6 @@ use crate::{
     linked_list::ContainsLinkedList,
     op::{Op, op_cast, op_impls},
     operation::{OpDbg, Operation},
-    opts::OptStatus,
     region::Region,
     result::Result,
     r#type::TypeObj,
@@ -494,14 +494,14 @@ fn rename_block(
 }
 
 /// Perform memory to register promotion on regions (recursively) within root.
-pub fn mem2reg(root: Ptr<Operation>, ctx: &mut Context) -> Result<OptStatus> {
+pub fn mem2reg(root: Ptr<Operation>, ctx: &mut Context) -> Result<IRStatus> {
     // Collect allocations that implement the promotable allocation interface.
     let mut candidates = collect_alloc_candidates(root, ctx);
     // Prune candidates that we cannot promote based on their uses.
     prune_candidates(&mut candidates, ctx);
 
     if candidates.is_empty() {
-        return Ok(OptStatus::IRUnchanged);
+        return Ok(IRStatus::Unchanged);
     }
 
     // Categorize by region for efficiency.
@@ -517,7 +517,7 @@ pub fn mem2reg(root: Ptr<Operation>, ctx: &mut Context) -> Result<OptStatus> {
         by_region.entry(region).or_default().push(cand);
     }
 
-    let mut opt_status = OptStatus::IRUnchanged;
+    let mut opt_status = IRStatus::Unchanged;
     for (region, mut alloc_candidates) in by_region {
         // Dominator tree and dominance frontier, once per region.
         let dom_tree: DomTree<Ptr<Region>, Context> = compute_dominator_tree(ctx, &region);
@@ -539,7 +539,7 @@ pub fn mem2reg(root: Ptr<Operation>, ctx: &mut Context) -> Result<OptStatus> {
         if alloc_candidates.is_empty() {
             continue;
         }
-        opt_status |= OptStatus::IRChanged;
+        opt_status |= IRStatus::Changed;
 
         // Add block arguments for phis, record arg indices.
         let mut new_phis_in_block: FxHashMap<Ptr<BasicBlock>, Vec<(AllocCandidate, usize)>> =

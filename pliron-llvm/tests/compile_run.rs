@@ -12,10 +12,12 @@ use pliron::{
     builtin::ops::ModuleOp,
     combine::Parser,
     context::{Context, Ptr},
-    init_env_logger_for_tests, location,
+    init_env_logger_for_tests,
+    irbuild::IRStatus,
+    location,
     op::{Op, verify_op},
     operation::{Operation, verify_operation},
-    opts::{self, OptStatus},
+    opts,
     parsable::{self, state_stream_from_file},
     printable::Printable,
     result::Result,
@@ -84,7 +86,7 @@ static RESOURCES_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
 
 pub(crate) struct OptFn {
     pub(crate) name: &'static str,
-    pub(crate) r#fn: fn(root: Ptr<Operation>, ctx: &mut Context) -> Result<OptStatus>,
+    pub(crate) r#fn: fn(root: Ptr<Operation>, ctx: &mut Context) -> Result<IRStatus>,
 }
 
 /// Test an LLVM-IR file by executing it and comparing the output.

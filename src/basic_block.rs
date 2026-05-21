@@ -149,6 +149,12 @@ impl BasicBlock {
         newblock
     }
 
+    /// Set the block's label.
+    /// This corresponds to the [given_name](Named::given_name) of this block.
+    pub fn set_label(&mut self, _ctx: &Context, label: Option<Identifier>) {
+        self.label = label;
+    }
+
     /// Get parent region.
     pub fn get_parent_region(&self) -> Option<Ptr<Region>> {
         self.region_links.parent_region

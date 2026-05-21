@@ -46,9 +46,9 @@ We also plan to start work on supporting a cranelift dialect/backend soon.
 
 ### Documentation & Resources
 * [Kaleidoscope tutorial](https://vaivaswatha.github.io/pliron/Kaleidoscope).
-* Latest Code documentation (for `master`) is available on [GitHub Pages](https://vaivaswatha.github.io/pliron/pliron).
-* Code documentation for all releases can be found on [docs.rs](https://docs.rs/pliron/latest/pliron/).
-* The [wiki](https://github.com/vaivaswatha/pliron/wiki) contains a few ad-hoc articles
+* Latest [docs](https://vaivaswatha.github.io/pliron/pliron) (built from `master`).
+* Release [docs.rs](https://docs.rs/pliron/latest/pliron/).
+* Misc articles on the [wiki](https://github.com/vaivaswatha/pliron/wiki)
 * #### Some talks / videos on `pliron`
   * [pliron: An Extensible IR Framework in Rust - IICT'24](https://www.youtube.com/watch?v=LobYuwcUaZA)
   * [Declarative IR Specification in Pliron - IICT'25](https://www.youtube.com/watch?v=w-g4xSOC9og)

@@ -330,7 +330,8 @@ fn split_block_after_const_zero() -> Result<()> {
             let block = op.deref(ctx).get_parent_block().unwrap();
 
             // Split the block after the constant 0 operation
-            let new_block = rewriter.split_block(ctx, block, OpInsertionPoint::AfterOperation(op));
+            let new_block =
+                rewriter.split_block(ctx, block, OpInsertionPoint::AfterOperation(op), None);
 
             // Insert constant 1 in the new block at the start
             let const1_op = ConstantOp::new(ctx, 1).get_operation();

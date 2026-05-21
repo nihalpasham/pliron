@@ -25,6 +25,7 @@ use crate::{
         HasLabel,
         walkers::{IRNode, WALKCONFIG_PREORDER_FORWARD, uninterruptible::mutable::walk_op},
     },
+    irbuild::IRStatus,
     irbuild::{
         inserter::Inserter,
         listener::{Recorder, RecorderEvent},
@@ -32,7 +33,6 @@ use crate::{
     },
     op::{Op, op_cast, op_impls},
     operation::{OpDbg, Operation},
-    opts::OptStatus,
     printable::Printable,
     result::Result,
     value::{DefiningEntity, Value},
@@ -184,7 +184,7 @@ fn note_erased_ops(
 
 /// Perform dead code elimination on the given operation and its nested operations.
 /// See module-level documentation for details on the DCE criteria and interfaces.
-pub fn dce(op: Ptr<Operation>, ctx: &mut Context) -> Result<OptStatus> {
+pub fn dce(op: Ptr<Operation>, ctx: &mut Context) -> Result<IRStatus> {
     let mut rewriter = IRRewriter::<Recorder>::default();
 
     let mut cemetery: Vec<DCECandidate> = Vec::new();
@@ -219,7 +219,7 @@ pub fn dce(op: Ptr<Operation>, ctx: &mut Context) -> Result<OptStatus> {
     );
 
     // Step 2: Process the cemetery (dead operations)
-    let mut modified = OptStatus::IRUnchanged;
+    let mut modified = IRStatus::Unchanged;
 
     while let Some(dead) = cemetery.pop() {
         let operands_of_dead = match dead {
@@ -268,7 +268,7 @@ pub fn dce(op: Ptr<Operation>, ctx: &mut Context) -> Result<OptStatus> {
                 defining_vals
             }
         };
-        modified = OptStatus::IRChanged;
+        modified = IRStatus::Changed;
 
         // For each operand, check if the defining value is now dead
         for def_val in operands_of_dead {

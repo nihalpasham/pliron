@@ -69,6 +69,7 @@ pub trait Rewriter<L: RewriteListener>: Inserter<L> {
         ctx: &mut Context,
         block: Ptr<BasicBlock>,
         position: OpInsertionPoint,
+        new_block_label: Option<Identifier>,
     ) -> Ptr<BasicBlock>;
 
     /// Inline a [Region] into another [Region] at the given insertion point.
@@ -335,13 +336,16 @@ impl<L: RewriteListener, I: Inserter<L>> Rewriter<L> for IRRewriter<L, I> {
         ctx: &mut Context,
         block: Ptr<BasicBlock>,
         position: OpInsertionPoint,
+        new_block_label: Option<Identifier>,
     ) -> Ptr<BasicBlock> {
         // `create_block` below sets the insert point to the new block, so we save and restore it.
         let mut rewriter = ScopedRewriter::new(self, OpInsertionPoint::Unset);
-        let label = block
-            .deref(ctx)
-            .given_name(ctx)
-            .map(|label| label + underscore() + "split".try_into().unwrap());
+        let label = new_block_label.or_else(|| {
+            block
+                .deref(ctx)
+                .given_name(ctx)
+                .map(|label| label + underscore() + "split".try_into().unwrap())
+        });
 
         let new_block =
             rewriter.create_block(ctx, BlockInsertionPoint::AfterBlock(block), label, vec![]);
@@ -587,8 +591,10 @@ impl<'a, L: RewriteListener, R: Rewriter<L>> Rewriter<L> for ScopedRewriter<'a, 
         ctx: &mut Context,
         block: Ptr<BasicBlock>,
         position: OpInsertionPoint,
+        new_block_label: Option<Identifier>,
     ) -> Ptr<BasicBlock> {
-        self.rewriter.split_block(ctx, block, position)
+        self.rewriter
+            .split_block(ctx, block, position, new_block_label)
     }
 
     fn inline_region(
