@@ -5,7 +5,7 @@
 [![Docs.rs](https://img.shields.io/docsrs/pliron)](https://docs.rs/pliron/latest/pliron/)
 [![Discord](https://img.shields.io/discord/1481908978978918523)](https://discord.gg/5M3K4Ujv7v)
 
-`pliron` is an extensible compiler IR framework in Rust, inspired by [MLIR](https://mlir.llvm.org/docs/LangRef/).
+`pliron` is an extensible compiler IR framework in Rust, inspired by [MLIR](https://mlir.llvm.org/).
 
 ### Build and Test
 * Install the [rust toolchain](https://www.rust-lang.org/tools/install).
