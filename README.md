@@ -5,7 +5,7 @@
 [![Docs.rs](https://img.shields.io/docsrs/pliron)](https://docs.rs/pliron/latest/pliron/)
 [![Discord](https://img.shields.io/discord/1481908978978918523)](https://discord.gg/5M3K4Ujv7v)
 
-`pliron` is an extensible compiler IR framework in Rust, inspired by [MLIR](https://mlir.llvm.org/docs/LangRef/).
+`pliron` is an extensible compiler IR framework in Rust, inspired by [MLIR](https://mlir.llvm.org/).
 
 ### Build and Test
 * Install the [rust toolchain](https://www.rust-lang.org/tools/install).
@@ -44,19 +44,16 @@ and of production quality. The LLVM dialect, although not complete, can be usefu
 for example, [compile bzip2](https://github.com/vaivaswatha/pliron/wiki/Compiling-bzip2-through-pliron's-LLVM-dialect).
 We also plan to start work on supporting a cranelift dialect/backend soon.
 
-### Documentation
-* Introduction and motivation are covered in the [introductory wiki article](https://github.com/vaivaswatha/pliron/wiki/Introduction).
-* The wiki also has a [comparison](https://github.com/vaivaswatha/pliron/wiki/Comparison-with-other-compiler-frameworks) of `pliron`
-with other compiler projects, touching upon some design decisions.
-* Code documentation for pliron releases can be found on
-[docs.rs](https://docs.rs/pliron/latest/pliron/).
-* Latest code (`master`) documentation is available on [GitHub Pages](https://vaivaswatha.github.io/pliron/).
-
-### Some talks on `pliron`
-* [pliron: An Extensible IR Framework in Rust - IICT'24](https://www.youtube.com/watch?v=LobYuwcUaZA)
-* [Declarative IR Specification in Pliron - IICT'25](https://www.youtube.com/watch?v=w-g4xSOC9og)
-* [Rust(ing) the Future of Compilers: Pliron as the MLIR Alternative (No C/C++)](https://www.youtube.com/watch?v=rRgYGBAhKQ0)
-* [Pliron Rust Workshop (6 sessions)](https://www.youtube.com/watch?v=6EjMWJ2PY-o)
+### Documentation & Resources
+* [Kaleidoscope tutorial](https://vaivaswatha.github.io/pliron/Kaleidoscope).
+* Latest Code documentation (for `master`) is available on [GitHub Pages](https://vaivaswatha.github.io/pliron/pliron).
+* Code documentation for all releases can be found on [docs.rs](https://docs.rs/pliron/latest/pliron/).
+* The [wiki](https://github.com/vaivaswatha/pliron/wiki) contains a few ad-hoc articles
+* #### Some talks / videos on `pliron`
+  * [pliron: An Extensible IR Framework in Rust - IICT'24](https://www.youtube.com/watch?v=LobYuwcUaZA)
+  * [Declarative IR Specification in Pliron - IICT'25](https://www.youtube.com/watch?v=w-g4xSOC9og)
+  * [Rust(ing) the Future of Compilers: Pliron as the MLIR Alternative (No C/C++)](https://www.youtube.com/watch?v=rRgYGBAhKQ0)
+  * [Pliron Rust Workshop (6 sessions)](https://www.youtube.com/watch?v=6EjMWJ2PY-o)
 
 ### Projects using `pliron`
 * [cuda-oxide](https://github.com/NVlabs/cuda-oxide): NVIDIA's Rust CUDA compiler.

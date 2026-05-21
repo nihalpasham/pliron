@@ -1,0 +1,16 @@
+[book]
+title = "Pliron Kaleidoscope - A Tutorial"
+authors = ["pliron contributors"]
+language = "en"
+src = "src"
+
+[build]
+build-dir = "../target/kaleidoscope"
+create-missing = false
+
+[output.html]
+default-theme = "light"
+preferred-dark-theme = "navy"
+no-section-label = true
+git-repository-url = "https://github.com/vaivaswatha/pliron"
+edit-url-template = "https://github.com/vaivaswatha/pliron/edit/master/kaleidoscope/{path}"

@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>pliron - Extensible Compiler IR</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      :root {
+        color-scheme: light;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+      body {
+        line-height: 1.6;
+        color: #1f2937;
+        background: linear-gradient(135deg, #f8fafc 0%, #f0f9ff 100%);
+        min-height: 100vh;
+      }
+      main {
+        max-width: 64rem;
+        margin: 0 auto;
+        padding: 4rem 1.5rem;
+      }
+      .hero {
+        text-align: center;
+        margin-bottom: 4rem;
+      }
+      h1 {
+        font-size: clamp(2.5rem, 5vw, 3.5rem);
+        margin-bottom: 1rem;
+        background: linear-gradient(135deg, #0f766e 0%, #0d9488 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        font-weight: 700;
+      }
+      .tagline {
+        font-size: 1.125rem;
+        color: #6b7280;
+        margin-bottom: 2rem;
+        max-width: 50rem;
+        margin-left: auto;
+        margin-right: auto;
+      }
+      .description {
+        font-size: 1rem;
+        color: #4b5563;
+        max-width: 56rem;
+        margin: 0 auto 3rem;
+        line-height: 1.7;
+      }
+      .categories {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(28rem, 1fr));
+        gap: 2rem;
+        margin-bottom: 2rem;
+      }
+      .category {
+        background: white;
+        border-radius: 12px;
+        padding: 2rem;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+        border: 1px solid rgba(0, 0, 0, 0.05);
+        transition: all 0.3s ease;
+      }
+      .category:hover {
+        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.12);
+        border-color: rgba(15, 118, 110, 0.2);
+        transform: translateY(-2px);
+      }
+      .category h2 {
+        font-size: 1.5rem;
+        margin-bottom: 1rem;
+        color: #0f766e;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+      }
+      .category-icon {
+        font-size: 1.75rem;
+      }
+      .category p {
+        color: #6b7280;
+        margin-bottom: 1.5rem;
+        font-size: 0.95rem;
+        line-height: 1.6;
+      }
+      .crate-list {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+      }
+      .crate-link {
+        display: flex;
+        align-items: center;
+        padding: 0.75rem;
+        border-radius: 8px;
+        background: #f8fafc;
+        border: 1px solid #e5e7eb;
+        text-decoration: none;
+        color: #0f766e;
+        transition: all 0.2s ease;
+        font-weight: 500;
+      }
+      .crate-link:hover {
+        background: #f0f9ff;
+        border-color: #0f766e;
+        padding-left: 1rem;
+      }
+      .crate-link::before {
+        content: "→";
+        margin-right: 0.5rem;
+        font-weight: bold;
+      }
+      .crate-description {
+        font-size: 0.85rem;
+        color: #6b7280;
+        margin-top: 0.25rem;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="hero">
+        <h1>pliron</h1>
+        <p class="tagline">An Extensible Compiler IR Framework</p>
+        <p class="description">
+          <b>pliron</b>, short for "Programming Languages Intermediate RepresentatiON",
+          is a compiler framework, inspired by <a href="https://mlir.llvm.org/" style="color: #0f766e; text-decoration: underline;">MLIR</a>
+          and written natively in Rust. <b>pliron</b> enables compiler engineers to easily build an entire compiler
+          pipeline by defining custom IRs, analyses, and transformations.
+        </p>
+      </div>
+
+      <div class="categories">
+        <div class="category">
+          <h2><span class="category-icon">📚</span> API Documentation</h2>
+          <p>Documentation for pliron crates</p>
+          <div class="crate-list">
+            <a href="pliron/" class="crate-link">
+              pliron
+              <div class="crate-description" style="margin-left: auto;">Core IR Framework</div>
+            </a>
+            <a href="pliron_derive/" class="crate-link">
+              pliron-derive
+              <div class="crate-description" style="margin-left: auto;">Derive Macros for IR Entities</div>
+            </a>
+            <a href="pliron_llvm/" class="crate-link">
+              pliron-llvm
+              <div class="crate-description" style="margin-left: auto;">LLVM Dialect and Integration</div>
+            </a>
+          </div>
+        </div>
+
+        <div class="category">
+          <h2><span class="category-icon">🎓</span> Learning Resources</h2>
+          <p>Learn by building a compiler through the Kaleidoscope tutorial series.</p>
+          <div class="crate-list">
+            <a href="Kaleidoscope/" class="crate-link">
+              Kaleidoscope Tutorial
+              <div class="crate-description" style="margin-left: auto;">Complete tutorial book</div>
+            </a>
+            <a href="https://www.youtube.com/watch?v=5chqB1V9cXc" class="crate-link">
+              Introduction Video (IICT'24)
+              <div class="crate-description" style="margin-left: auto;">Workshop Talk</div>
+            </a>
+          </div>
+        </div>
+      </div>
+
+      <div style="text-align: center; margin-top: 4rem; padding-top: 2rem; border-top: 1px solid #e5e7eb;">
+        <img src="https://github.com/user-attachments/assets/adfaaeed-775f-4290-92fd-93d7c9b4fd12" alt="pliron logo" style="max-width: 200px; height: auto;">
+      </div>
+    </main>
+  </body>
+</html>

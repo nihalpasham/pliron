@@ -1,0 +1,13 @@
+def main(n) {
+    return factorial(n);
+}
+
+def factorial(n) {
+    var result = 1;
+    var i = n;
+    while i > 0 {
+        result = result * i;
+        i = i - 1;
+    }
+    return result;
+}
