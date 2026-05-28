@@ -112,8 +112,8 @@ fn dce_removes_dead_llvm_constant() -> Result<()> {
     let input = r#"
     llvm.func @f: llvm.func <builtin.integer si64 () variadic = false> [] {
       ^entry():
-      live = llvm.constant <builtin.integer <7: si64>> : builtin.integer si64;
-      dead = llvm.constant <builtin.integer <0: si64>> : builtin.integer si64;
+      live = builtin.constant <builtin.integer <7: si64>> : builtin.integer si64;
+      dead = builtin.constant <builtin.integer <0: si64>> : builtin.integer si64;
       llvm.return live
     }
   "#;
@@ -130,7 +130,7 @@ fn dce_keeps_live_llvm_constant() -> Result<()> {
     let input = r#"
     llvm.func @f: llvm.func <builtin.integer si64 () variadic = false> [] {
       ^entry():
-      live = llvm.constant <builtin.integer <9: si64>> : builtin.integer si64;
+      live = builtin.constant <builtin.integer <9: si64>> : builtin.integer si64;
       llvm.return live
     }
   "#;
@@ -146,7 +146,7 @@ fn dce_does_not_remove_unused_entry_block_arg_in_llvm_func() -> Result<()> {
     let input = r#"
     llvm.func @f: llvm.func <builtin.integer si64 (builtin.integer si64) variadic = false> [] {
       ^entry(arg0: builtin.integer si64):
-      c = llvm.constant <builtin.integer <5: si64>> : builtin.integer si64;
+      c = builtin.constant <builtin.integer <5: si64>> : builtin.integer si64;
       llvm.return c
     }
   "#;
@@ -162,11 +162,11 @@ fn dce_removes_dead_non_entry_block_arg_and_br_operand() -> Result<()> {
     let input = r#"
     llvm.func @f: llvm.func <builtin.integer si64 () variadic = false> [] {
       ^entry():
-      x = llvm.constant <builtin.integer <1: si64>> : builtin.integer si64;
+      x = builtin.constant <builtin.integer <1: si64>> : builtin.integer si64;
       llvm.br ^bb1(x)
 
       ^bb1(arg0: builtin.integer si64):
-      c = llvm.constant <builtin.integer <7: si64>> : builtin.integer si64;
+      c = builtin.constant <builtin.integer <7: si64>> : builtin.integer si64;
       llvm.return c
     }
   "#;
@@ -183,7 +183,7 @@ fn dce_keeps_used_non_entry_block_arg() -> Result<()> {
     let input = r#"
     llvm.func @f: llvm.func <builtin.integer si64 () variadic = false> [] {
       ^entry():
-      x = llvm.constant <builtin.integer <1: si64>> : builtin.integer si64;
+      x = builtin.constant <builtin.integer <1: si64>> : builtin.integer si64;
       llvm.br ^bb1(x)
 
       ^bb1(arg0: builtin.integer si64):
@@ -204,8 +204,8 @@ fn dce_dead_arg_cascades_to_successor_operands() -> Result<()> {
     let input = r#"
     llvm.func @f: llvm.func <builtin.integer si64 () variadic = false> [] {
       ^entry():
-      dead_val = llvm.constant <builtin.integer <1: si64>> : builtin.integer si64;
-      live_val = llvm.constant <builtin.integer <42: si64>> : builtin.integer si64;
+      dead_val = builtin.constant <builtin.integer <1: si64>> : builtin.integer si64;
+      live_val = builtin.constant <builtin.integer <42: si64>> : builtin.integer si64;
       llvm.br ^merge(dead_val, live_val)
 
       ^merge(dead_arg: builtin.integer si64, live_arg: builtin.integer si64):
@@ -231,11 +231,11 @@ fn dce_multiple_preds_mixed_dead_live_operands() -> Result<()> {
     let input = r#"
     llvm.func @f: llvm.func <builtin.integer si64 () variadic = false> [] {
       ^entry():
-      cond = llvm.constant <builtin.integer <1: i1>> : builtin.integer i1;
-      dead_left = llvm.constant <builtin.integer <1: si64>> : builtin.integer si64;
-      live_left = llvm.constant <builtin.integer <10: si64>> : builtin.integer si64;
-      dead_right = llvm.constant <builtin.integer <2: si64>> : builtin.integer si64;
-      live_right = llvm.constant <builtin.integer <20: si64>> : builtin.integer si64;
+      cond = builtin.constant <builtin.integer <1: i1>> : builtin.integer i1;
+      dead_left = builtin.constant <builtin.integer <1: si64>> : builtin.integer si64;
+      live_left = builtin.constant <builtin.integer <10: si64>> : builtin.integer si64;
+      dead_right = builtin.constant <builtin.integer <2: si64>> : builtin.integer si64;
+      live_right = builtin.constant <builtin.integer <20: si64>> : builtin.integer si64;
       llvm.cond_br if cond ^left(dead_left, live_left) else ^right(dead_right, live_right)
 
       ^left(left_dead: builtin.integer si64, left_live: builtin.integer si64):
@@ -271,9 +271,9 @@ fn dce_all_successor_operands_dead() -> Result<()> {
     let input = r#"
     llvm.func @f: llvm.func <builtin.integer si64 () variadic = false> [] {
       ^entry():
-      dead1 = llvm.constant <builtin.integer <7: si64>> : builtin.integer si64;
-      dead2 = llvm.constant <builtin.integer <8: si64>> : builtin.integer si64;
-      live = llvm.constant <builtin.integer <99: si64>> : builtin.integer si64;
+      dead1 = builtin.constant <builtin.integer <7: si64>> : builtin.integer si64;
+      dead2 = builtin.constant <builtin.integer <8: si64>> : builtin.integer si64;
+      live = builtin.constant <builtin.integer <99: si64>> : builtin.integer si64;
       llvm.br ^exit(dead1, dead2)
 
       ^exit(unused1: builtin.integer si64, unused2: builtin.integer si64):
@@ -300,10 +300,10 @@ fn dce_chain_of_dead_computations() -> Result<()> {
     let input = r#"
     llvm.func @f: llvm.func <builtin.integer si64 () variadic = false> [] {
       ^entry():
-      dead1 = llvm.constant <builtin.integer <1: si64>> : builtin.integer si64;
-      dead2 = llvm.constant <builtin.integer <2: si64>> : builtin.integer si64;
-      dead3 = llvm.constant <builtin.integer <3: si64>> : builtin.integer si64;
-      live = llvm.constant <builtin.integer <99: si64>> : builtin.integer si64;
+      dead1 = builtin.constant <builtin.integer <1: si64>> : builtin.integer si64;
+      dead2 = builtin.constant <builtin.integer <2: si64>> : builtin.integer si64;
+      dead3 = builtin.constant <builtin.integer <3: si64>> : builtin.integer si64;
+      live = builtin.constant <builtin.integer <99: si64>> : builtin.integer si64;
       llvm.br ^exit(dead1, dead2, dead3)
 
       ^exit(unused1: builtin.integer si64, unused2: builtin.integer si64, unused3: builtin.integer si64):
@@ -342,19 +342,19 @@ fn dce_region_containing_dead_op_safely_ignores_inner_dead_code() -> Result<()> 
     let input = r#"
     llvm.func @test: llvm.func <builtin.integer i64 () variadic = false> [] {
       ^entry():
-      inner_dead1 = llvm.constant <builtin.integer <10: i64>> : builtin.integer i64;
-      inner_dead2 = llvm.constant <builtin.integer <20: i64>> : builtin.integer i64;
+      inner_dead1 = builtin.constant <builtin.integer <10: i64>> : builtin.integer i64;
+      inner_dead2 = builtin.constant <builtin.integer <20: i64>> : builtin.integer i64;
       not_initially_dead = test.pure_region {
         ^region_entry():
-          region_dead1 = llvm.constant <builtin.integer <100: i64>> : builtin.integer i64;
-          region_dead2 = llvm.constant <builtin.integer <200: i64>> : builtin.integer i64;
+          region_dead1 = builtin.constant <builtin.integer <100: i64>> : builtin.integer i64;
+          region_dead2 = builtin.constant <builtin.integer <200: i64>> : builtin.integer i64;
           llvm.br ^region_dead(region_dead1)
 
         ^region_dead(arg0: builtin.integer i64):
           llvm.return
       } : builtin.integer i64;
       dead = llvm.add not_initially_dead, not_initially_dead <{nsw=false,nuw=false}> : builtin.integer i64;
-      live = llvm.constant <builtin.integer <99: i64>> : builtin.integer i64;
+      live = builtin.constant <builtin.integer <99: i64>> : builtin.integer i64;
       llvm.return live
     }
   "#;
@@ -415,7 +415,7 @@ fn dce_eliminates_multi_result_op_after_same_op_and_successor_uses_die() -> Resu
       llvm.br ^exit(left, right)
 
       ^exit(arg0: builtin.integer si64, arg1: builtin.integer si64):
-      live = llvm.constant <builtin.integer <99: si64>> : builtin.integer si64;
+      live = builtin.constant <builtin.integer <99: si64>> : builtin.integer si64;
       llvm.return live
     }
   "#;

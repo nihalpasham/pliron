@@ -3,7 +3,7 @@
 use pliron::{
     attribute::AttrObj,
     basic_block::BasicBlock,
-    builtin::attributes::IntegerAttr,
+    builtin::{attributes::IntegerAttr, ops::ConstantOp},
     context::{Context, Ptr},
     derive::op_interface_impl,
     irbuild::{IRStatus, rewriter::Rewriter},
@@ -16,12 +16,11 @@ use pliron::{
 };
 
 use crate::ops::{
-    AShrOp, AddOp, AddressOfOp, AllocaOp, AndOp, BitcastOp, ConstantOp, ExtractElementOp,
-    ExtractValueOp, FAddOp, FCmpOp, FDivOp, FMulOp, FNegOp, FPExtOp, FPToSIOp, FPToUIOp, FPTruncOp,
-    FRemOp, FSubOp, FreezeOp, FuncOp, GetElementPtrOp, ICmpOp, InsertElementOp, InsertValueOp,
-    IntToPtrOp, LShrOp, MulOp, OrOp, PoisonOp, PtrToIntOp, SDivOp, SExtOp, SIToFPOp, SRemOp,
-    SelectOp, ShlOp, ShuffleVectorOp, SubOp, TruncOp, UDivOp, UIToFPOp, URemOp, UndefOp, XorOp,
-    ZExtOp, ZeroOp,
+    AShrOp, AddOp, AddressOfOp, AllocaOp, AndOp, BitcastOp, ExtractElementOp, ExtractValueOp,
+    FAddOp, FCmpOp, FDivOp, FMulOp, FNegOp, FPExtOp, FPToSIOp, FPToUIOp, FPTruncOp, FRemOp, FSubOp,
+    FreezeOp, FuncOp, GetElementPtrOp, ICmpOp, InsertElementOp, InsertValueOp, IntToPtrOp, LShrOp,
+    MulOp, OrOp, PoisonOp, PtrToIntOp, SDivOp, SExtOp, SIToFPOp, SRemOp, SelectOp, ShlOp,
+    ShuffleVectorOp, SubOp, TruncOp, UDivOp, UIToFPOp, URemOp, UndefOp, XorOp, ZExtOp, ZeroOp,
 };
 
 // Implement [SideEffects] with `has_side_effects` returning `false`
@@ -64,7 +63,6 @@ impl_side_effects_false!(
     UndefOp,
     PoisonOp,
     FreezeOp,
-    ConstantOp,
     ZeroOp,
     AddressOfOp,
     SExtOp,
@@ -96,26 +94,6 @@ impl_side_effects_false!(
 impl BlockArgRemoval for FuncOp {
     fn can_remove_block_args(&self, ctx: &Context, block: Ptr<BasicBlock>) -> bool {
         !matches!(self.get_entry_block(ctx), Some(entry) if entry == block)
-    }
-}
-
-#[op_interface_impl]
-impl ConstFoldInterface for ConstantOp {
-    fn check_fold(
-        &self,
-        ctx: &Context,
-        _operand_attrs: &[Option<AttrObj>],
-    ) -> Vec<Option<AttrObj>> {
-        vec![Some(self.get_value(ctx))]
-    }
-
-    fn fold_in_place(
-        &self,
-        _ctx: &mut Context,
-        _operand_attrs: &[Option<AttrObj>],
-        _rewriter: &mut dyn Rewriter,
-    ) -> IRStatus {
-        IRStatus::Unchanged
     }
 }
 

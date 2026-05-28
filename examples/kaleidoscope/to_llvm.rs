@@ -29,7 +29,7 @@ use pliron::{
         op_interfaces::{
             CallOpCallable, OneRegionInterface, OneResultInterface, SymbolOpInterface,
         },
-        ops::ModuleOp,
+        ops::{ConstantOp as BuiltinConstantOp, ModuleOp},
         types::{IntegerType, Signedness},
     },
     context::{Context, Ptr},
@@ -55,9 +55,8 @@ use pliron_llvm::{
     attributes::{ICmpPredicateAttr, IntegerOverflowFlagsAttr},
     op_interfaces::{CastOpInterface, IntBinArithOpWithOverflowFlag},
     ops::{
-        AddOp, AllocaOp, BrOp, CallOp as LlvmCallOp, CondBrOp, ConstantOp as LlvmConstantOp,
-        ICmpOp, LoadOp as LlvmLoadOp, MulOp, ReturnOp as LlvmReturnOp, SExtOp,
-        StoreOp as LlvmStoreOp, SubOp,
+        AddOp, AllocaOp, BrOp, CallOp as LlvmCallOp, CondBrOp, ICmpOp, LoadOp as LlvmLoadOp, MulOp,
+        ReturnOp as LlvmReturnOp, SExtOp, StoreOp as LlvmStoreOp, SubOp,
     },
     types::FuncType,
 };
@@ -125,7 +124,7 @@ impl ToLLVMDialect for KalConstantOp {
         _operands_info: &OperandsInfo,
     ) -> Result<()> {
         let val_attr = self.value_attr(ctx);
-        let llvm_const = LlvmConstantOp::new(ctx, Box::new(val_attr));
+        let llvm_const = BuiltinConstantOp::new(ctx, Box::new(val_attr));
         let new_result = llvm_const.get_result(ctx);
         rewriter.insert_op(ctx, &llvm_const);
         rewriter.replace_operation_with_values(ctx, self.get_operation(), vec![new_result]);
@@ -147,7 +146,7 @@ impl ToLLVMDialect for KalDeclOp {
         let i32_ty = IntegerType::get(ctx, 32, Signedness::Signless);
         let elem_ty = self.variable_type(ctx);
         let size_attr = IntegerAttr::new(i32_ty, APInt::from_i32(1, bw(32)));
-        let size_const = LlvmConstantOp::new(ctx, Box::new(size_attr));
+        let size_const = BuiltinConstantOp::new(ctx, Box::new(size_attr));
         let size_val = size_const.get_result(ctx);
         rewriter.insert_op(ctx, &size_const);
         let alloca = AllocaOp::new(ctx, elem_ty, size_val);
@@ -379,7 +378,7 @@ impl ToLLVMDialect for KalIfOp {
 
         // Convert the i64 condition to i1 via `icmp ne cond, 0`.
         let zero_attr = IntegerAttr::new(i64_ty, APInt::from_i64(0, bw(64)));
-        let zero_const = LlvmConstantOp::new(ctx, Box::new(zero_attr));
+        let zero_const = BuiltinConstantOp::new(ctx, Box::new(zero_attr));
         let zero_val = zero_const.get_result(ctx);
         rewriter.insert_op(ctx, &zero_const);
         let cmp = ICmpOp::new(ctx, ICmpPredicateAttr::NE, cond, zero_val);
@@ -495,7 +494,7 @@ impl ToLLVMDialect for KalWhileOp {
         let cond_i64 = cond_load.get_result(ctx);
         rewriter.insert_op(ctx, &cond_load);
         let zero_attr = IntegerAttr::new(i64_ty, APInt::from_i64(0, bw(64)));
-        let zero_const = LlvmConstantOp::new(ctx, Box::new(zero_attr));
+        let zero_const = BuiltinConstantOp::new(ctx, Box::new(zero_attr));
         let zero_val = zero_const.get_result(ctx);
         rewriter.insert_op(ctx, &zero_const);
         let cmp = ICmpOp::new(ctx, ICmpPredicateAttr::NE, cond_i64, zero_val);

@@ -52,7 +52,7 @@ impl ReturnOp {
 
 mod constant_op {
     use pliron::dict_key;
-    dict_key!(ATTR_KEY_VALUE, "constant_value");
+    dict_key!(ATTR_KEY_VALUE, "test_constant_value");
 }
 
 #[pliron_op(
