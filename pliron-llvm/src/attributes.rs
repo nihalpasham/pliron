@@ -235,6 +235,39 @@ pub struct AlignmentAttr(pub u32);
 #[derive(PartialEq, Eq, Clone, Debug, Hash)]
 pub struct AddressSpaceAttr(pub u32);
 
+/// Memory ordering for an atomic operation (`atomicrmw` / `cmpxchg` / `fence` /
+/// atomic `load` / `store`).
+#[pliron_attr(name = "llvm.atomic_ordering", verifier = "succ", format)]
+#[derive(PartialEq, Eq, Clone, Debug, Hash)]
+pub enum AtomicOrderingAttr {
+    Monotonic,
+    Acquire,
+    Release,
+    AcqRel,
+    SeqCst,
+}
+
+/// The kind of an LLVM `atomicrmw` operation.
+#[pliron_attr(name = "llvm.atomic_rmw_kind", verifier = "succ", format)]
+#[derive(PartialEq, Eq, Clone, Debug, Hash)]
+pub enum AtomicRmwKindAttr {
+    Xchg,
+    Add,
+    Sub,
+    And,
+    Nand,
+    Or,
+    Xor,
+    Max,
+    Min,
+    UMax,
+    UMin,
+    FAdd,
+    FSub,
+    FMax,
+    FMin,
+}
+
 #[pliron_attr(
     name = "llvm.shuffle_vector_mask",
     format = "`[` vec($0, CharSpace(`,`)) `]`",

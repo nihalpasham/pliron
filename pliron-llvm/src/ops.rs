@@ -52,8 +52,9 @@ use pliron::{
 
 use crate::{
     attributes::{
-        AddressSpaceAttr, AlignmentAttr, CaseValuesAttr, FCmpPredicateAttr, FastmathFlagsAttr,
-        InsertExtractValueIndicesAttr, LinkageAttr, ShuffleVectorMaskAttr,
+        AddressSpaceAttr, AlignmentAttr, AtomicOrderingAttr, AtomicRmwKindAttr, CaseValuesAttr,
+        FCmpPredicateAttr, FastmathFlagsAttr, InsertExtractValueIndicesAttr, LinkageAttr,
+        ShuffleVectorMaskAttr,
     },
     op_interfaces::{
         AlignableOpInterface, BinArithOp, CastOpInterface, CastOpWithNNegInterface, FastMathFlags,
@@ -1564,6 +1565,257 @@ impl PromotableOpInterface for StoreOp {
         }
         rewriter.erase_operation(ctx, self.get_operation());
         Ok(())
+    }
+}
+
+/// Equivalent to LLVM's `atomicrmw`: atomically applies `kind` to the value at
+/// a pointer and returns the old value.
+///
+/// ### Operands
+/// | operand | description |
+/// |-----|-------|
+/// | `ptr` | [PointerType] |
+/// | `val` | value to combine with the one in memory |
+///
+/// ### Result(s):
+/// | result | description |
+/// |-----|-------|
+/// | `res` | the old value (same type as `val`) |
+#[pliron_op(
+    name = "llvm.atomicrmw",
+    format = "attr($llvm_rmw_kind, $AtomicRmwKindAttr) ` ` $0 `, ` $1 ` ` opt_attr($llvm_rmw_syncscope, $StringAttr, label($syncscope)) attr($llvm_rmw_ordering, $AtomicOrderingAttr) ` : ` type($0)",
+    interfaces = [
+        OneResultInterface,
+        NResultsInterface<1>,
+        NOpdsInterface<2>,
+        OperandNOfType<0, PointerType>
+    ],
+    attributes = (
+        llvm_rmw_kind: AtomicRmwKindAttr,
+        llvm_rmw_ordering: AtomicOrderingAttr,
+        llvm_rmw_syncscope: StringAttr
+    ),
+    verifier = "succ"
+)]
+pub struct AtomicRmwOp;
+
+impl AtomicRmwOp {
+    /// Create a new [AtomicRmwOp]. `syncscope` is `None` for the system scope.
+    pub fn new(
+        ctx: &mut Context,
+        ptr: Value,
+        val: Value,
+        kind: AtomicRmwKindAttr,
+        ordering: AtomicOrderingAttr,
+        syncscope: Option<String>,
+    ) -> Self {
+        use pliron::r#type::Typed;
+        let res_ty = val.get_type(ctx);
+        let op = Operation::new(
+            ctx,
+            Self::get_concrete_op_info(),
+            vec![res_ty],
+            vec![ptr, val],
+            vec![],
+            0,
+        );
+        let op = AtomicRmwOp { op };
+        op.set_attr_llvm_rmw_kind(ctx, kind);
+        op.set_attr_llvm_rmw_ordering(ctx, ordering);
+        if let Some(scope) = syncscope {
+            op.set_attr_llvm_rmw_syncscope(ctx, StringAttr::new(scope));
+        }
+        op
+    }
+}
+
+/// Equivalent to LLVM's `cmpxchg`: atomically compares the value at a pointer
+/// with `cmp` and, if equal, stores `new`. Returns a `{ value, i1 }` pair of the
+/// loaded value and whether the swap succeeded.
+///
+/// ### Operands
+/// | operand | description |
+/// |-----|-------|
+/// | `ptr` | [PointerType] |
+/// | `cmp` | expected value |
+/// | `new` | value to store on success |
+///
+/// ### Result(s):
+/// | result | description |
+/// |-----|-------|
+/// | `res` | `{ value, i1 }` (loaded value, success flag) |
+#[pliron_op(
+    name = "llvm.cmpxchg",
+    format = "$0 `, ` $1 `, ` $2 ` ` opt_attr($llvm_cas_syncscope, $StringAttr, label($syncscope)) attr($llvm_cas_success_ordering, $AtomicOrderingAttr) ` ` attr($llvm_cas_failure_ordering, $AtomicOrderingAttr) ` : ` type($0)",
+    interfaces = [
+        OneResultInterface,
+        NResultsInterface<1>,
+        NOpdsInterface<3>,
+        OperandNOfType<0, PointerType>
+    ],
+    attributes = (
+        llvm_cas_success_ordering: AtomicOrderingAttr,
+        llvm_cas_failure_ordering: AtomicOrderingAttr,
+        llvm_cas_syncscope: StringAttr
+    ),
+    verifier = "succ"
+)]
+pub struct AtomicCmpxchgOp;
+
+impl AtomicCmpxchgOp {
+    /// Create a new [AtomicCmpxchgOp]. `syncscope` is `None` for the system scope.
+    pub fn new(
+        ctx: &mut Context,
+        ptr: Value,
+        cmp: Value,
+        new_val: Value,
+        success_ordering: AtomicOrderingAttr,
+        failure_ordering: AtomicOrderingAttr,
+        syncscope: Option<String>,
+    ) -> Self {
+        use pliron::r#type::Typed;
+        let val_ty = cmp.get_type(ctx);
+        let bool_ty = IntegerType::get(ctx, 1, Signedness::Signless);
+        let res_ty = StructType::get_unnamed(ctx, vec![val_ty, bool_ty.into()]).into();
+        let op = Operation::new(
+            ctx,
+            Self::get_concrete_op_info(),
+            vec![res_ty],
+            vec![ptr, cmp, new_val],
+            vec![],
+            0,
+        );
+        let op = AtomicCmpxchgOp { op };
+        op.set_attr_llvm_cas_success_ordering(ctx, success_ordering);
+        op.set_attr_llvm_cas_failure_ordering(ctx, failure_ordering);
+        if let Some(scope) = syncscope {
+            op.set_attr_llvm_cas_syncscope(ctx, StringAttr::new(scope));
+        }
+        op
+    }
+}
+
+/// Equivalent to LLVM's `fence`: orders memory accesses. Has no operands or
+/// results.
+#[pliron_op(
+    name = "llvm.fence",
+    format = "opt_attr($llvm_fence_syncscope, $StringAttr, label($syncscope)) attr($llvm_fence_ordering, $AtomicOrderingAttr)",
+    interfaces = [NResultsInterface<0>, NOpdsInterface<0>],
+    attributes = (llvm_fence_ordering: AtomicOrderingAttr, llvm_fence_syncscope: StringAttr),
+    verifier = "succ"
+)]
+pub struct FenceOp;
+
+impl FenceOp {
+    /// Create a new [FenceOp]. `syncscope` is `None` for the system scope.
+    pub fn new(ctx: &mut Context, ordering: AtomicOrderingAttr, syncscope: Option<String>) -> Self {
+        let op = Operation::new(ctx, Self::get_concrete_op_info(), vec![], vec![], vec![], 0);
+        let op = FenceOp { op };
+        op.set_attr_llvm_fence_ordering(ctx, ordering);
+        if let Some(scope) = syncscope {
+            op.set_attr_llvm_fence_syncscope(ctx, StringAttr::new(scope));
+        }
+        op
+    }
+}
+
+/// Equivalent to LLVM's atomic `load`.
+///
+/// ### Operands
+/// | operand | description |
+/// |-----|-------|
+/// | `ptr` | [PointerType] |
+///
+/// ### Result(s):
+/// | result | description |
+/// |-----|-------|
+/// | `res` | the loaded value |
+#[pliron_op(
+    name = "llvm.atomic_load",
+    format = "$0 ` ` opt_attr($llvm_alignment, $AlignmentAttr, label($align), delimiters(`[`, `]`)) ` ` opt_attr($llvm_ld_syncscope, $StringAttr, label($syncscope)) attr($llvm_ld_ordering, $AtomicOrderingAttr) ` : ` type($0)",
+    interfaces = [
+        OneResultInterface,
+        OneOpdInterface,
+        NResultsInterface<1>,
+        NOpdsInterface<1>,
+        AlignableOpInterface,
+        OperandNOfType<0, PointerType>
+    ],
+    attributes = (llvm_ld_ordering: AtomicOrderingAttr, llvm_ld_syncscope: StringAttr),
+    verifier = "succ"
+)]
+pub struct AtomicLoadOp;
+
+impl AtomicLoadOp {
+    /// Create a new [AtomicLoadOp]. `syncscope` is `None` for the system scope.
+    pub fn new(
+        ctx: &mut Context,
+        ptr: Value,
+        res_ty: Ptr<TypeObj>,
+        ordering: AtomicOrderingAttr,
+        syncscope: Option<String>,
+    ) -> Self {
+        let op = Operation::new(
+            ctx,
+            Self::get_concrete_op_info(),
+            vec![res_ty],
+            vec![ptr],
+            vec![],
+            0,
+        );
+        let op = AtomicLoadOp { op };
+        op.set_attr_llvm_ld_ordering(ctx, ordering);
+        if let Some(scope) = syncscope {
+            op.set_attr_llvm_ld_syncscope(ctx, StringAttr::new(scope));
+        }
+        op
+    }
+}
+
+/// Equivalent to LLVM's atomic `store`.
+///
+/// ### Operands
+/// | operand | description |
+/// |-----|-------|
+/// | `val` | value to store |
+/// | `ptr` | [PointerType] |
+#[pliron_op(
+    name = "llvm.atomic_store",
+    format = "`*` $1 ` <- ` $0 ` ` opt_attr($llvm_alignment, $AlignmentAttr, label($align), delimiters(`[`, `]`)) ` ` opt_attr($llvm_st_syncscope, $StringAttr, label($syncscope)) attr($llvm_st_ordering, $AtomicOrderingAttr)",
+    interfaces = [
+        NResultsInterface<0>,
+        AlignableOpInterface,
+        OperandNOfType<1, PointerType>,
+        NOpdsInterface<2>
+    ],
+    attributes = (llvm_st_ordering: AtomicOrderingAttr, llvm_st_syncscope: StringAttr),
+    verifier = "succ"
+)]
+pub struct AtomicStoreOp;
+
+impl AtomicStoreOp {
+    /// Create a new [AtomicStoreOp]. `syncscope` is `None` for the system scope.
+    pub fn new(
+        ctx: &mut Context,
+        value: Value,
+        ptr: Value,
+        ordering: AtomicOrderingAttr,
+        syncscope: Option<String>,
+    ) -> Self {
+        let op = Operation::new(
+            ctx,
+            Self::get_concrete_op_info(),
+            vec![],
+            vec![value, ptr],
+            vec![],
+            0,
+        );
+        let op = AtomicStoreOp { op };
+        op.set_attr_llvm_st_ordering(ctx, ordering);
+        if let Some(scope) = syncscope {
+            op.set_attr_llvm_st_syncscope(ctx, StringAttr::new(scope));
+        }
+        op
     }
 }
 
