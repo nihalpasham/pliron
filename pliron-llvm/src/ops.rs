@@ -96,7 +96,6 @@ use super::{
     name = "llvm.return",
     format = "operands(CharSpace(`,`))",
     interfaces = [IsTerminatorInterface, NResultsInterface<0>, AtMostNOpdsInterface<1>, OptionalOpdInterface],
-    verifier = "succ"
 )]
 pub struct ReturnOp;
 impl ReturnOp {
@@ -116,6 +115,45 @@ impl ReturnOp {
     /// Get the returned value, if it exists.
     pub fn retval(&self, ctx: &Context) -> Option<Value> {
         self.get_operand(ctx)
+    }
+}
+
+#[derive(Error, Debug)]
+enum ReturnOpVerifyErr {
+    #[error("ReturnOp must have no operands in a void function")]
+    VoidWithOperand,
+    #[error("ReturnOp must have exactly one operand in a non-void function")]
+    NonVoidArity,
+    #[error("ReturnOp operand type does not match the function's result type")]
+    ResultTypeMismatch,
+}
+
+impl Verify for ReturnOp {
+    fn verify(&self, ctx: &Context) -> Result<()> {
+        use pliron::r#type::Typed;
+        // Signature coupling is only enforced when the return is inside a FuncOp.
+        let Some(parent_op) = self.get_operation().deref(ctx).get_parent_op(ctx) else {
+            return Ok(());
+        };
+        let Some(func_op) = Operation::get_op::<FuncOp>(parent_op, ctx) else {
+            return Ok(());
+        };
+        let func_ty = func_op.get_type(ctx);
+        let res_ty = func_ty.deref(ctx).result_type();
+        let num_operands = self.get_operation().deref(ctx).get_num_operands();
+        if res_ty.deref(ctx).is::<crate::types::VoidType>() {
+            if num_operands != 0 {
+                verify_err!(self.loc(ctx), ReturnOpVerifyErr::VoidWithOperand)?
+            }
+        } else if num_operands != 1 {
+            verify_err!(self.loc(ctx), ReturnOpVerifyErr::NonVoidArity)?
+        } else {
+            let ret_ty = self.get_operation().deref(ctx).get_operand(0).get_type(ctx);
+            if ret_ty != res_ty {
+                verify_err!(self.loc(ctx), ReturnOpVerifyErr::ResultTypeMismatch)?
+            }
+        }
+        Ok(())
     }
 }
 
@@ -645,9 +683,25 @@ pub struct AddrSpaceCastOp;
     name = "llvm.br",
     format = "succ($0) `(` operands(CharSpace(`,`)) `)`",
     interfaces = [IsTerminatorInterface, NResultsInterface<0>],
-    verifier = "succ"
 )]
 pub struct BrOp;
+
+#[derive(Error, Debug)]
+enum BrOpVerifyErr {
+    #[error("BrOp must have exactly one successor")]
+    ExpectedOneSuccessor,
+}
+
+impl Verify for BrOp {
+    fn verify(&self, ctx: &Context) -> Result<()> {
+        // Operand/argument count and types are checked by BranchOpInterface;
+        // here we only enforce the single-successor invariant.
+        if self.get_operation().deref(ctx).get_num_successors() != 1 {
+            verify_err!(self.loc(ctx), BrOpVerifyErr::ExpectedOneSuccessor)?
+        }
+        Ok(())
+    }
+}
 
 #[op_interface_impl]
 impl BranchOpInterface for BrOp {
@@ -2168,7 +2222,7 @@ impl Verify for CallOp {
 #[pliron_op(
     name = "llvm.undef",
     format = "`: ` type($0)",
-    interfaces = [OneResultInterface, NResultsInterface<1>],
+    interfaces = [OneResultInterface, NResultsInterface<1>, NOpdsInterface<0>],
     verifier = "succ"
 )]
 pub struct UndefOp;
@@ -2525,11 +2579,25 @@ impl Parsable for GlobalOp {
 #[pliron_op(
     name = "llvm.addressof",
     format = "`@` attr($global_name, $IdentifierAttr) ` : ` type($0)",
-    interfaces = [OneResultInterface, NResultsInterface<1>, ResultNOfType<0, PointerType>],
+    interfaces = [OneResultInterface, NResultsInterface<1>, NOpdsInterface<0>, ResultNOfType<0, PointerType>],
     attributes = (global_name: IdentifierAttr),
-    verifier = "succ"
 )]
 pub struct AddressOfOp;
+
+#[derive(Error, Debug)]
+enum AddressOfOpVerifyErr {
+    #[error("AddressOfOp is missing its `global_name` attribute")]
+    MissingGlobalName,
+}
+
+impl Verify for AddressOfOp {
+    fn verify(&self, ctx: &Context) -> Result<()> {
+        if self.get_attr_global_name(ctx).is_none() {
+            verify_err!(self.loc(ctx), AddressOfOpVerifyErr::MissingGlobalName)?
+        }
+        Ok(())
+    }
+}
 
 impl AddressOfOp {
     /// Create a new [AddressOfOp].
