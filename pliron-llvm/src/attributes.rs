@@ -385,4 +385,63 @@ mod tests {
             }
         }
     }
+
+    fn assert_attr_roundtrips<A>(ctx: &mut Context, attr: A)
+    where
+        A: Parsable<Arg = (), Parsed = A> + Printable + PartialEq + std::fmt::Debug,
+    {
+        let printed = attr.disp(ctx).to_string();
+        let mut state_stream = state_stream_from_iterator(
+            printed.chars(),
+            parsable::State::new(ctx, location::Source::InMemory),
+        );
+        let (parsed, _) = A::parse(&mut state_stream, ()).unwrap();
+        assert_eq!(parsed, attr, "round-trip mismatch for `{printed}`");
+    }
+
+    #[test]
+    fn test_atomic_ordering_attr_roundtrip() {
+        let ctx = &mut Context::default();
+        for ordering in [
+            AtomicOrderingAttr::Monotonic,
+            AtomicOrderingAttr::Acquire,
+            AtomicOrderingAttr::Release,
+            AtomicOrderingAttr::AcqRel,
+            AtomicOrderingAttr::SeqCst,
+        ] {
+            assert_attr_roundtrips(ctx, ordering);
+        }
+    }
+
+    #[test]
+    fn test_atomic_rmw_kind_attr_roundtrip() {
+        let ctx = &mut Context::default();
+        for kind in [
+            AtomicRmwKindAttr::Xchg,
+            AtomicRmwKindAttr::Add,
+            AtomicRmwKindAttr::Sub,
+            AtomicRmwKindAttr::And,
+            AtomicRmwKindAttr::Nand,
+            AtomicRmwKindAttr::Or,
+            AtomicRmwKindAttr::Xor,
+            AtomicRmwKindAttr::Max,
+            AtomicRmwKindAttr::Min,
+            AtomicRmwKindAttr::UMax,
+            AtomicRmwKindAttr::UMin,
+            AtomicRmwKindAttr::FAdd,
+            AtomicRmwKindAttr::FSub,
+            AtomicRmwKindAttr::FMax,
+            AtomicRmwKindAttr::FMin,
+        ] {
+            assert_attr_roundtrips(ctx, kind);
+        }
+    }
+
+    #[test]
+    fn test_address_space_attr_roundtrip() {
+        let ctx = &mut Context::default();
+        for n in [0u32, 1, 3, 5, 7] {
+            assert_attr_roundtrips(ctx, AddressSpaceAttr(n));
+        }
+    }
 }
