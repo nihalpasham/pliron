@@ -42,14 +42,14 @@ use crate::{
     attributes::{FCmpPredicateAttr, ICmpPredicateAttr, LinkageAttr},
     llvm_sys::core::{
         LLVMBasicBlock, LLVMBuilder, LLVMContext, LLVMModule, LLVMType, LLVMValue,
-        instruction_iter, llvm_add_case, llvm_add_function, llvm_add_global, llvm_add_incoming,
-        llvm_append_basic_block_in_context, llvm_array_type2, llvm_build_add, llvm_build_and,
-        llvm_build_array_alloca, llvm_build_ashr, llvm_build_bitcast, llvm_build_br,
-        llvm_build_call2, llvm_build_cond_br, llvm_build_extract_element, llvm_build_extract_value,
-        llvm_build_fadd, llvm_build_fcmp, llvm_build_fdiv, llvm_build_fmul, llvm_build_fpext,
-        llvm_build_fptosi, llvm_build_fptoui, llvm_build_fptrunc, llvm_build_freeze,
-        llvm_build_frem, llvm_build_fsub, llvm_build_gep2, llvm_build_icmp,
-        llvm_build_insert_element, llvm_build_insert_value, llvm_build_int_to_ptr,
+        instruction_iter, llvm_add_case, llvm_add_function, llvm_add_global_in_address_space,
+        llvm_add_incoming, llvm_append_basic_block_in_context, llvm_array_type2, llvm_build_add,
+        llvm_build_addrspacecast, llvm_build_and, llvm_build_array_alloca, llvm_build_ashr,
+        llvm_build_bitcast, llvm_build_br, llvm_build_call2, llvm_build_cond_br,
+        llvm_build_extract_element, llvm_build_extract_value, llvm_build_fadd, llvm_build_fcmp,
+        llvm_build_fdiv, llvm_build_fmul, llvm_build_fpext, llvm_build_fptosi, llvm_build_fptoui,
+        llvm_build_fptrunc, llvm_build_freeze, llvm_build_frem, llvm_build_fsub, llvm_build_gep2,
+        llvm_build_icmp, llvm_build_insert_element, llvm_build_insert_value, llvm_build_int_to_ptr,
         llvm_build_load2, llvm_build_lshr, llvm_build_mul, llvm_build_or, llvm_build_phi,
         llvm_build_ptr_to_int, llvm_build_ret, llvm_build_ret_void, llvm_build_sdiv,
         llvm_build_select, llvm_build_sext, llvm_build_shl, llvm_build_shuffle_vector,
@@ -71,13 +71,13 @@ use crate::{
         PointerTypeResult,
     },
     ops::{
-        AShrOp, AddOp, AddressOfOp, AllocaOp, AndOp, BitcastOp, BrOp, CallIntrinsicOp, CallOp,
-        CondBrOp, ExtractElementOp, ExtractValueOp, FAddOp, FCmpOp, FDivOp, FMulOp, FPExtOp,
-        FPToSIOp, FPToUIOp, FPTruncOp, FRemOp, FSubOp, FreezeOp, FuncOp, GetElementPtrOp, GlobalOp,
-        ICmpOp, InsertElementOp, InsertValueOp, IntToPtrOp, LShrOp, LoadOp, MulOp, OrOp, PoisonOp,
-        PtrToIntOp, ReturnOp, SDivOp, SExtOp, SIToFPOp, SRemOp, SelectOp, ShlOp, ShuffleVectorOp,
-        StoreOp, SubOp, SwitchOp, TruncOp, UDivOp, UIToFPOp, URemOp, UndefOp, UnreachableOp,
-        VAArgOp, XorOp, ZExtOp, ZeroOp,
+        AShrOp, AddOp, AddrSpaceCastOp, AddressOfOp, AllocaOp, AndOp, BitcastOp, BrOp,
+        CallIntrinsicOp, CallOp, CondBrOp, ExtractElementOp, ExtractValueOp, FAddOp, FCmpOp,
+        FDivOp, FMulOp, FPExtOp, FPToSIOp, FPToUIOp, FPTruncOp, FRemOp, FSubOp, FreezeOp, FuncOp,
+        GetElementPtrOp, GlobalOp, ICmpOp, InsertElementOp, InsertValueOp, IntToPtrOp, LShrOp,
+        LoadOp, MulOp, OrOp, PoisonOp, PtrToIntOp, ReturnOp, SDivOp, SExtOp, SIToFPOp, SRemOp,
+        SelectOp, ShlOp, ShuffleVectorOp, StoreOp, SubOp, SwitchOp, TruncOp, UDivOp, UIToFPOp,
+        URemOp, UndefOp, UnreachableOp, VAArgOp, XorOp, ZExtOp, ZeroOp,
     },
     types::{ArrayType, FuncType, PointerType, StructType, VectorType, VoidType},
 };
@@ -339,7 +339,7 @@ impl ToLLVMType for PointerType {
         llvm_ctx: &LLVMContext,
         _cctx: &mut ConversionContext,
     ) -> Result<LLVMType> {
-        Ok(llvm_pointer_type_in_context(llvm_ctx, 0))
+        Ok(llvm_pointer_type_in_context(llvm_ctx, self.address_space()))
     }
 }
 
@@ -546,6 +546,26 @@ impl ToLLVMValue for BitcastOp {
             &self.get_result(ctx).unique_name(ctx),
         );
         Ok(bitcast_op)
+    }
+}
+
+#[op_interface_impl]
+impl ToLLVMValue for AddrSpaceCastOp {
+    fn convert(
+        &self,
+        ctx: &Context,
+        llvm_ctx: &LLVMContext,
+        cctx: &mut ConversionContext,
+    ) -> Result<LLVMValue> {
+        let arg = convert_value_operand(cctx, ctx, &self.get_operand(ctx))?;
+        let ty = convert_type(ctx, llvm_ctx, cctx, self.result_type(ctx))?;
+        let addrspacecast_op = llvm_build_addrspacecast(
+            &cctx.builder,
+            arg,
+            ty,
+            &self.get_result(ctx).unique_name(ctx),
+        );
+        Ok(addrspacecast_op)
     }
 }
 
@@ -1998,7 +2018,13 @@ pub fn convert_module(
             let llvm_global_name = global_op
                 .llvm_symbol_name(ctx)
                 .unwrap_or(global_name.clone().into());
-            let global_llvm = llvm_add_global(&llvm_module, global_ty_llvm, &llvm_global_name);
+            let global_addr_space = global_op.address_space(ctx);
+            let global_llvm = llvm_add_global_in_address_space(
+                &llvm_module,
+                global_ty_llvm,
+                &llvm_global_name,
+                global_addr_space,
+            );
             cctx.globals_map.insert(global_name, global_llvm);
         }
     }

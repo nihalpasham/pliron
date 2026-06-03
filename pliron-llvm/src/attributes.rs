@@ -230,6 +230,11 @@ pub struct InsertExtractValueIndicesAttr(pub Vec<u32>);
 #[derive(PartialEq, Eq, Clone, Debug, Hash)]
 pub struct AlignmentAttr(pub u32);
 
+/// Address space of a pointer or global, corresponding to LLVM's `addrspace(N)`.
+#[pliron_attr(name = "llvm.addrspace", format = "$0", verifier = "succ")]
+#[derive(PartialEq, Eq, Clone, Debug, Hash)]
+pub struct AddressSpaceAttr(pub u32);
+
 #[pliron_attr(
     name = "llvm.shuffle_vector_mask",
     format = "`[` vec($0, CharSpace(`,`)) `]`",

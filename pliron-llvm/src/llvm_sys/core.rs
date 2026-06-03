@@ -14,13 +14,13 @@ use llvm_sys::{
     analysis::LLVMVerifyModule,
     bit_writer::LLVMWriteBitcodeToFile,
     core::{
-        LLVMAddCase, LLVMAddFunction, LLVMAddGlobal, LLVMAddIncoming,
+        LLVMAddCase, LLVMAddFunction, LLVMAddGlobal, LLVMAddGlobalInAddressSpace, LLVMAddIncoming,
         LLVMAppendBasicBlockInContext, LLVMArrayType2, LLVMBasicBlockAsValue, LLVMBuildAShr,
-        LLVMBuildAdd, LLVMBuildAnd, LLVMBuildArrayAlloca, LLVMBuildBitCast, LLVMBuildBr,
-        LLVMBuildCall2, LLVMBuildCondBr, LLVMBuildExtractElement, LLVMBuildExtractValue,
-        LLVMBuildFAdd, LLVMBuildFCmp, LLVMBuildFDiv, LLVMBuildFMul, LLVMBuildFPExt,
-        LLVMBuildFPToSI, LLVMBuildFPToUI, LLVMBuildFPTrunc, LLVMBuildFRem, LLVMBuildFSub,
-        LLVMBuildFreeze, LLVMBuildGEP2, LLVMBuildICmp, LLVMBuildInsertElement,
+        LLVMBuildAdd, LLVMBuildAddrSpaceCast, LLVMBuildAnd, LLVMBuildArrayAlloca, LLVMBuildBitCast,
+        LLVMBuildBr, LLVMBuildCall2, LLVMBuildCondBr, LLVMBuildExtractElement,
+        LLVMBuildExtractValue, LLVMBuildFAdd, LLVMBuildFCmp, LLVMBuildFDiv, LLVMBuildFMul,
+        LLVMBuildFPExt, LLVMBuildFPToSI, LLVMBuildFPToUI, LLVMBuildFPTrunc, LLVMBuildFRem,
+        LLVMBuildFSub, LLVMBuildFreeze, LLVMBuildGEP2, LLVMBuildICmp, LLVMBuildInsertElement,
         LLVMBuildInsertValue, LLVMBuildIntToPtr, LLVMBuildLShr, LLVMBuildLoad2, LLVMBuildMul,
         LLVMBuildOr, LLVMBuildPhi, LLVMBuildPtrToInt, LLVMBuildRet, LLVMBuildRetVoid,
         LLVMBuildSDiv, LLVMBuildSExt, LLVMBuildSIToFP, LLVMBuildSRem, LLVMBuildSelect,
@@ -47,18 +47,18 @@ use llvm_sys::{
         LLVMGetNamedFunction, LLVMGetNamedGlobal, LLVMGetNextBasicBlock, LLVMGetNextFunction,
         LLVMGetNextGlobal, LLVMGetNextInstruction, LLVMGetNextParam, LLVMGetNumArgOperands,
         LLVMGetNumIndices, LLVMGetNumMaskElements, LLVMGetNumOperands, LLVMGetOperand,
-        LLVMGetParam, LLVMGetParamTypes, LLVMGetPoison, LLVMGetPreviousBasicBlock,
-        LLVMGetPreviousFunction, LLVMGetPreviousGlobal, LLVMGetPreviousInstruction,
-        LLVMGetPreviousParam, LLVMGetReturnType, LLVMGetStructElementTypes, LLVMGetStructName,
-        LLVMGetSwitchCaseValue, LLVMGetTypeKind, LLVMGetUndef, LLVMGetUndefMaskElem,
-        LLVMGetValueKind, LLVMGetValueName2, LLVMGetVectorSize, LLVMGlobalGetValueType,
-        LLVMIntTypeInContext, LLVMIntrinsicIsOverloaded, LLVMIsAFunction, LLVMIsATerminatorInst,
-        LLVMIsAUser, LLVMIsDeclaration, LLVMIsFunctionVarArg, LLVMIsOpaqueStruct,
-        LLVMLookupIntrinsicID, LLVMModuleCreateWithNameInContext, LLVMPointerTypeInContext,
-        LLVMPositionBuilderAtEnd, LLVMPositionBuilderBefore, LLVMPrintModuleToFile,
-        LLVMPrintModuleToString, LLVMPrintTypeToString, LLVMPrintValueToString,
-        LLVMScalableVectorType, LLVMSetAlignment, LLVMSetFastMathFlags, LLVMSetInitializer,
-        LLVMSetLinkage, LLVMSetNNeg, LLVMStructCreateNamed, LLVMStructSetBody,
+        LLVMGetParam, LLVMGetParamTypes, LLVMGetPointerAddressSpace, LLVMGetPoison,
+        LLVMGetPreviousBasicBlock, LLVMGetPreviousFunction, LLVMGetPreviousGlobal,
+        LLVMGetPreviousInstruction, LLVMGetPreviousParam, LLVMGetReturnType,
+        LLVMGetStructElementTypes, LLVMGetStructName, LLVMGetSwitchCaseValue, LLVMGetTypeKind,
+        LLVMGetUndef, LLVMGetUndefMaskElem, LLVMGetValueKind, LLVMGetValueName2, LLVMGetVectorSize,
+        LLVMGlobalGetValueType, LLVMIntTypeInContext, LLVMIntrinsicIsOverloaded, LLVMIsAFunction,
+        LLVMIsATerminatorInst, LLVMIsAUser, LLVMIsDeclaration, LLVMIsFunctionVarArg,
+        LLVMIsOpaqueStruct, LLVMLookupIntrinsicID, LLVMModuleCreateWithNameInContext,
+        LLVMPointerTypeInContext, LLVMPositionBuilderAtEnd, LLVMPositionBuilderBefore,
+        LLVMPrintModuleToFile, LLVMPrintModuleToString, LLVMPrintTypeToString,
+        LLVMPrintValueToString, LLVMScalableVectorType, LLVMSetAlignment, LLVMSetFastMathFlags,
+        LLVMSetInitializer, LLVMSetLinkage, LLVMSetNNeg, LLVMStructCreateNamed, LLVMStructSetBody,
         LLVMStructTypeInContext, LLVMTypeIsSized, LLVMTypeOf, LLVMValueAsBasicBlock,
         LLVMValueIsBasicBlock, LLVMVectorType, LLVMVoidTypeInContext,
     },
@@ -635,6 +635,12 @@ pub fn llvm_get_int_type_width(ty: LLVMType) -> u32 {
     unsafe { LLVMGetIntTypeWidth(ty.into()) }
 }
 
+/// LLVMGetPointerAddressSpace
+pub fn llvm_get_pointer_address_space(ty: LLVMType) -> u32 {
+    assert!(llvm_get_type_kind(ty) == LLVMTypeKind::LLVMPointerTypeKind);
+    unsafe { LLVMGetPointerAddressSpace(ty.into()) }
+}
+
 /// LLVMIsOpaqueStruct
 pub fn llvm_is_opaque_struct(ty: LLVMType) -> bool {
     assert!(llvm_get_type_kind(ty) == LLVMTypeKind::LLVMStructTypeKind);
@@ -1193,6 +1199,24 @@ pub fn llvm_add_global(module: &LLVMModule, ty: LLVMType, name: &str) -> LLVMVal
     unsafe { LLVMAddGlobal(module.inner_ref(), ty.into(), to_c_str(name).as_ptr()).into() }
 }
 
+/// LLVMAddGlobalInAddressSpace
+pub fn llvm_add_global_in_address_space(
+    module: &LLVMModule,
+    ty: LLVMType,
+    name: &str,
+    addr_space: u32,
+) -> LLVMValue {
+    unsafe {
+        LLVMAddGlobalInAddressSpace(
+            module.inner_ref(),
+            ty.into(),
+            to_c_str(name).as_ptr(),
+            addr_space,
+        )
+        .into()
+    }
+}
+
 /// LLVMGetInsertBlock
 pub fn llvm_get_insert_block(builder: &LLVMBuilder) -> Option<LLVMBasicBlock> {
     unsafe {
@@ -1639,6 +1663,25 @@ pub fn llvm_build_bitcast(
     assert!(llvm_get_insert_block(builder).is_some());
     unsafe {
         LLVMBuildBitCast(
+            builder.inner_ref(),
+            val.into(),
+            dest_ty.into(),
+            to_c_str(name).as_ptr(),
+        )
+        .into()
+    }
+}
+
+/// LLVMBuildAddrSpaceCast
+pub fn llvm_build_addrspacecast(
+    builder: &LLVMBuilder,
+    val: LLVMValue,
+    dest_ty: LLVMType,
+    name: &str,
+) -> LLVMValue {
+    assert!(llvm_get_insert_block(builder).is_some());
+    unsafe {
+        LLVMBuildAddrSpaceCast(
             builder.inner_ref(),
             val.into(),
             dest_ty.into(),

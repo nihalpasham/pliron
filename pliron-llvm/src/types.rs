@@ -1,6 +1,6 @@
 //! [Type]s defined in the LLVM dialect.
 
-use pliron::combine::{Parser, between, optional, token};
+use pliron::combine::{self, Parser, between, optional, token};
 
 use pliron::builtin::type_interfaces::FunctionTypeInterface;
 use pliron::derive::{format, pliron_type, type_interface_impl};
@@ -10,7 +10,7 @@ use pliron::{
     identifier::Identifier,
     input_err_noloc,
     irfmt::{
-        parsers::{delimited_list_parser, location, spaced},
+        parsers::{delimited_list_parser, int_parser, location, spaced},
         printers::{enclosed, list_with_sep},
     },
     location::Located,
@@ -295,10 +295,62 @@ impl Parsable for StructType {
 
 impl Eq for StructType {}
 
-/// An opaque pointer, corresponding to LLVM's pointer type.
-#[pliron_type(name = "llvm.ptr", generate_get = true, format, verifier = "succ")]
+/// A pointer, corresponding to LLVM's pointer type. It is opaque (carries no
+/// pointee type) but carries an address space, mirroring LLVM's `ptr` /
+/// `ptr addrspace(N)`. Address space 0 prints as a bare `llvm.ptr`.
+#[pliron_type(name = "llvm.ptr", generate_get = true, verifier = "succ")]
 #[derive(Hash, PartialEq, Eq, Debug)]
-pub struct PointerType;
+pub struct PointerType {
+    address_space: u32,
+}
+
+impl PointerType {
+    /// The address space of this pointer.
+    pub fn address_space(&self) -> u32 {
+        self.address_space
+    }
+}
+
+impl Printable for PointerType {
+    fn fmt(
+        &self,
+        _ctx: &Context,
+        _state: &printable::State,
+        f: &mut core::fmt::Formatter<'_>,
+    ) -> core::fmt::Result {
+        // Address space 0 prints as a bare `llvm.ptr`; non-zero adds `addrspace(N)`.
+        if self.address_space != 0 {
+            write!(f, "addrspace({})", self.address_space)?;
+        }
+        Ok(())
+    }
+}
+
+impl Parsable for PointerType {
+    type Arg = ();
+    type Parsed = TypePtr<Self>;
+    fn parse<'a>(
+        state_stream: &mut StateStream<'a>,
+        _arg: Self::Arg,
+    ) -> ParseResult<'a, Self::Parsed>
+    where
+        Self: Sized,
+    {
+        // Optionally parse `addrspace(N)`; its absence means address space 0.
+        let mut parser = spaced(optional(
+            combine::parser::char::string("addrspace").with(between(
+                token('('),
+                token(')'),
+                int_parser::<u32>(),
+            )),
+        ))
+        .map(|addr_space| addr_space.unwrap_or(0));
+        parser
+            .parse_stream(state_stream)
+            .map(|address_space| PointerType::get(state_stream.state.ctx, address_space))
+            .into()
+    }
+}
 
 /// Array type, corresponding to LLVM's array type.
 #[pliron_type(
@@ -421,7 +473,7 @@ mod tests {
     use pliron::combine::{self, Parser, eof, token};
     use pliron::derive::{pliron_type, verify_succ};
 
-    use crate::types::{FuncType, StructType, VoidType};
+    use crate::types::{FuncType, PointerType, StructType, VoidType};
     use pliron::{
         builtin::types::{IntegerType, Signedness},
         context::{Context, Ptr},
@@ -575,6 +627,43 @@ mod tests {
         assert_eq!(
             &res.disp(&ctx).to_string(),
             "llvm.typed_ptr <builtin.integer si64>"
+        );
+    }
+
+    #[test]
+    fn test_opaque_pointer_addrspace() {
+        let mut ctx = Context::new();
+
+        // Address space 0 prints (and round-trips) as a bare `llvm.ptr`.
+        let state_stream = state_stream_from_iterator(
+            "llvm.ptr".chars(),
+            parsable::State::new(&mut ctx, location::Source::InMemory),
+        );
+        let res = type_parser().parse(state_stream).unwrap().0;
+        // The framework appends a space after every type name; addrspace 0 adds
+        // no body, so the canonical form is a bare `llvm.ptr`.
+        assert_eq!(res.disp(&ctx).to_string().trim(), "llvm.ptr");
+        assert_eq!(
+            res.deref(&ctx)
+                .downcast_ref::<PointerType>()
+                .unwrap()
+                .address_space(),
+            0
+        );
+
+        // A non-zero address space round-trips as `llvm.ptr addrspace(N)`.
+        let state_stream = state_stream_from_iterator(
+            "llvm.ptr addrspace(3)".chars(),
+            parsable::State::new(&mut ctx, location::Source::InMemory),
+        );
+        let res = type_parser().parse(state_stream).unwrap().0;
+        assert_eq!(res.disp(&ctx).to_string().trim(), "llvm.ptr addrspace(3)");
+        assert_eq!(
+            res.deref(&ctx)
+                .downcast_ref::<PointerType>()
+                .unwrap()
+                .address_space(),
+            3
         );
     }
 

@@ -52,7 +52,7 @@ use pliron::{
 
 use crate::{
     attributes::{
-        AlignmentAttr, CaseValuesAttr, FCmpPredicateAttr, FastmathFlagsAttr,
+        AddressSpaceAttr, AlignmentAttr, CaseValuesAttr, FCmpPredicateAttr, FastmathFlagsAttr,
         InsertExtractValueIndicesAttr, LinkageAttr, ShuffleVectorMaskAttr,
     },
     op_interfaces::{
@@ -449,7 +449,8 @@ impl PointerTypeResult for AllocaOp {
 impl AllocaOp {
     /// Create a new [AllocaOp]
     pub fn new(ctx: &mut Context, elem_type: Ptr<TypeObj>, size: Value) -> Self {
-        let ptr_ty = PointerType::get(ctx).into();
+        // `alloca` yields a pointer in the default (stack) address space.
+        let ptr_ty = PointerType::get(ctx, 0).into();
         let op = Operation::new(
             ctx,
             Self::get_concrete_op_info(),
@@ -600,6 +601,33 @@ pub enum PtrToIntOpErr {
     verifier = "succ"
 )]
 pub struct PtrToIntOp;
+
+/// Equivalent to LLVM's AddrSpaceCast opcode: casts a pointer to a pointer in a
+/// different address space.
+/// ### Operands
+/// | operand | description |
+/// |-----|-------|
+/// | `arg` | [PointerType] |
+///
+/// ### Result(s):
+/// | result | description |
+/// |-----|-------|
+/// | `res` | [PointerType] |
+#[pliron_op(
+    name = "llvm.addrspacecast",
+    format = "$0 ` to ` type($0)",
+    interfaces = [
+        OneResultInterface,
+        OneOpdInterface,
+        NResultsInterface<1>,
+        NOpdsInterface<1>,
+        CastOpInterface,
+        OperandNOfType<0, PointerType>,
+        ResultNOfType<0, PointerType>,
+    ],
+    verifier = "succ"
+)]
+pub struct AddrSpaceCastOp;
 
 /// Equivalent to LLVM's Unconditional Branch.
 /// ### Operands
@@ -1279,7 +1307,17 @@ impl GetElementPtrOp {
         indices: Vec<GepIndex>,
         src_elem_type: Ptr<TypeObj>,
     ) -> Self {
-        let result_type = PointerType::get(ctx).into();
+        use pliron::r#type::Typed;
+
+        // A GEP result inherits the address space of its base pointer.
+        let addr_space = {
+            let base_ty = base.get_type(ctx);
+            base_ty
+                .deref(ctx)
+                .downcast_ref::<PointerType>()
+                .map_or(0, PointerType::address_space)
+        };
+        let result_type = PointerType::get(ctx, addr_space).into();
         let mut attr: Vec<GepIndexAttr> = Vec::new();
         let mut opds: Vec<Value> = vec![base];
         for idx in indices {
@@ -1963,7 +2001,12 @@ pub enum GlobalOpVerifyErr {
         LlvmSymbolName,
         AlignableOpInterface
     ],
-    attributes = (llvm_global_type: TypeAttr, global_initializer, llvm_global_linkage: LinkageAttr)
+    attributes = (
+        llvm_global_type: TypeAttr,
+        global_initializer,
+        llvm_global_linkage: LinkageAttr,
+        llvm_global_addrspace: AddressSpaceAttr
+    )
 )]
 pub struct GlobalOp;
 
@@ -1975,6 +2018,17 @@ impl GlobalOp {
         op.set_symbol_name(ctx, name);
         op.set_attr_llvm_global_type(ctx, TypeAttr::new(ty));
         op
+    }
+
+    /// Get the address space of this global (0 if unset).
+    pub fn address_space(&self, ctx: &Context) -> u32 {
+        self.get_attr_llvm_global_addrspace(ctx)
+            .map_or(0, |attr| attr.0)
+    }
+
+    /// Set the address space of this global.
+    pub fn set_address_space(&self, ctx: &mut Context, addr_space: u32) {
+        self.set_attr_llvm_global_addrspace(ctx, AddressSpaceAttr(addr_space));
     }
 }
 
@@ -2175,7 +2229,8 @@ pub struct AddressOfOp;
 impl AddressOfOp {
     /// Create a new [AddressOfOp].
     pub fn new(ctx: &mut Context, global_name: Identifier) -> Self {
-        let result_type = PointerType::get(ctx).into();
+        // TODO: once globals carry an address space, use the global's space here.
+        let result_type = PointerType::get(ctx, 0).into();
         let op = Operation::new(
             ctx,
             Self::get_concrete_op_info(),

@@ -56,25 +56,25 @@ use crate::{
         llvm_get_int_type_width, llvm_get_linkage, llvm_get_mask_value, llvm_get_module_identifier,
         llvm_get_nneg, llvm_get_nsw, llvm_get_num_arg_operands, llvm_get_num_mask_elements,
         llvm_get_num_operands, llvm_get_nuw, llvm_get_operand, llvm_get_param_types,
-        llvm_get_return_type, llvm_get_struct_element_types, llvm_get_struct_name,
-        llvm_get_switch_case_value, llvm_get_type_kind, llvm_get_value_kind, llvm_get_value_name,
-        llvm_get_vector_size, llvm_global_get_value_type, llvm_is_a, llvm_is_declaration,
-        llvm_is_function_type_var_arg, llvm_is_opaque_struct, llvm_lookup_intrinsic_id,
-        llvm_print_value_to_string, llvm_type_of, llvm_value_as_basic_block,
-        llvm_value_is_basic_block, param_iter,
+        llvm_get_pointer_address_space, llvm_get_return_type, llvm_get_struct_element_types,
+        llvm_get_struct_name, llvm_get_switch_case_value, llvm_get_type_kind, llvm_get_value_kind,
+        llvm_get_value_name, llvm_get_vector_size, llvm_global_get_value_type, llvm_is_a,
+        llvm_is_declaration, llvm_is_function_type_var_arg, llvm_is_opaque_struct,
+        llvm_lookup_intrinsic_id, llvm_print_value_to_string, llvm_type_of,
+        llvm_value_as_basic_block, llvm_value_is_basic_block, param_iter,
     },
     op_interfaces::{
         AlignableOpInterface, BinArithOp, CastOpInterface, CastOpWithNNegInterface, FastMathFlags,
         FloatBinArithOpWithFastMathFlags, IntBinArithOpWithOverflowFlag, LlvmSymbolName,
     },
     ops::{
-        AShrOp, AddOp, AddressOfOp, AllocaOp, AndOp, BitcastOp, BrOp, CallIntrinsicOp, CallOp,
-        CondBrOp, ExtractElementOp, ExtractValueOp, FAddOp, FCmpOp, FDivOp, FMulOp, FNegOp,
-        FPExtOp, FPToSIOp, FPToUIOp, FPTruncOp, FRemOp, FSubOp, FreezeOp, FuncOp, GepIndex,
-        GetElementPtrOp, GlobalOp, ICmpOp, InsertElementOp, InsertValueOp, IntToPtrOp, LShrOp,
-        LoadOp, MulOp, OrOp, PoisonOp, PtrToIntOp, ReturnOp, SDivOp, SExtOp, SIToFPOp, SRemOp,
-        SelectOp, ShlOp, ShuffleVectorOp, StoreOp, SubOp, SwitchCase, SwitchOp, TruncOp, UDivOp,
-        UIToFPOp, URemOp, UndefOp, UnreachableOp, VAArgOp, XorOp, ZExtOp, ZeroOp,
+        AShrOp, AddOp, AddrSpaceCastOp, AddressOfOp, AllocaOp, AndOp, BitcastOp, BrOp,
+        CallIntrinsicOp, CallOp, CondBrOp, ExtractElementOp, ExtractValueOp, FAddOp, FCmpOp,
+        FDivOp, FMulOp, FNegOp, FPExtOp, FPToSIOp, FPToUIOp, FPTruncOp, FRemOp, FSubOp, FreezeOp,
+        FuncOp, GepIndex, GetElementPtrOp, GlobalOp, ICmpOp, InsertElementOp, InsertValueOp,
+        IntToPtrOp, LShrOp, LoadOp, MulOp, OrOp, PoisonOp, PtrToIntOp, ReturnOp, SDivOp, SExtOp,
+        SIToFPOp, SRemOp, SelectOp, ShlOp, ShuffleVectorOp, StoreOp, SubOp, SwitchCase, SwitchOp,
+        TruncOp, UDivOp, UIToFPOp, URemOp, UndefOp, UnreachableOp, VAArgOp, XorOp, ZExtOp, ZeroOp,
     },
     types::{
         ArrayType, FuncType, PointerType, StructErr, StructType, VectorType, VectorTypeKind,
@@ -137,7 +137,9 @@ fn convert_type(
             let bit_width = llvm_get_int_type_width(ty);
             Ok(IntegerType::get(ctx, bit_width, Signedness::Signless).into())
         }
-        LLVMTypeKind::LLVMPointerTypeKind => Ok(PointerType::get(ctx).into()),
+        LLVMTypeKind::LLVMPointerTypeKind => {
+            Ok(PointerType::get(ctx, llvm_get_pointer_address_space(ty)).into())
+        }
         LLVMTypeKind::LLVMStructTypeKind => {
             let name_opt: Option<Identifier> =
                 llvm_get_struct_name(ty).map(|str| cctx.id_legaliser.legalise(&str));
@@ -876,7 +878,11 @@ fn convert_instruction(
                     .get_operation(),
             )
         }
-        LLVMOpcode::LLVMAddrSpaceCast => todo!(),
+        LLVMOpcode::LLVMAddrSpaceCast => {
+            let arg = get_operand(opds, 0)?;
+            let res_ty = convert_type(ctx, cctx, llvm_type_of(inst))?;
+            Ok(AddrSpaceCastOp::new(ctx, arg, res_ty).get_operation())
+        }
         LLVMOpcode::LLVMAlloca => {
             let elem_type = convert_type(ctx, cctx, llvm_get_allocated_type(inst))?;
             let size = get_operand(opds, 0)?;
@@ -1408,6 +1414,11 @@ fn convert_global(
     )?;
 
     let op = GlobalOp::new(ctx, name.clone(), ty);
+
+    let addr_space = llvm_get_pointer_address_space(llvm_type_of(global));
+    if addr_space != 0 {
+        op.set_address_space(ctx, addr_space);
+    }
 
     if <Identifier as Into<String>>::into(name) != llvm_name {
         op.set_llvm_symbol_name(ctx, llvm_name);
