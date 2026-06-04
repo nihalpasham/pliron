@@ -91,7 +91,7 @@ fn test_addrspacecast_roundtrips() {
                 .get_operation()
                 .insert_at_back(entry, ctx);
         },
-        &["llvm.addrspacecast", "llvm.ptr addrspace(1)"],
+        &["llvm.addrspacecast", "llvm.ptr (1)"],
     );
 }
 
