@@ -2756,3 +2756,191 @@ pub(super) fn handle_err(err: LLVMErrorRef) -> Result<(), String> {
         }
     }
 }
+
+// =============================================================================
+// Atomics + inline assembly.
+//
+// Wrappers for the LLVM-C atomic and inline-asm builders/accessors, used by the
+// to_llvm_ir / from_llvm_ir bridge for `llvm.atomicrmw`, `llvm.cmpxchg`,
+// `llvm.fence`, `llvm.atomic_load`, `llvm.atomic_store` and `llvm.inline_asm`.
+// =============================================================================
+
+// llvm-sys 221's binding for `LLVMGetSyncScopeID` is missing its return type
+// (it is declared as returning `()`), so we re-declare the correct signature.
+// The real LLVM-C symbol returns the `unsigned` synchronization-scope id.
+unsafe extern "C" {
+    fn LLVMGetSyncScopeID(
+        c: llvm_sys::prelude::LLVMContextRef,
+        name: *const core::ffi::c_char,
+        slen: usize,
+    ) -> core::ffi::c_uint;
+}
+
+/// Resolve a synchronization-scope id by name within `ctx`. The empty string is
+/// the system scope (id 1); `"singlethread"` is the single-thread scope (id 0).
+pub fn llvm_get_sync_scope_id(ctx: &LLVMContext, name: &str) -> u32 {
+    unsafe {
+        LLVMGetSyncScopeID(
+            ctx.inner_ref(),
+            name.as_ptr() as *const core::ffi::c_char,
+            name.len(),
+        )
+    }
+}
+
+/// LLVMBuildAtomicRMWSyncScope
+pub fn llvm_build_atomic_rmw(
+    builder: &LLVMBuilder,
+    op: llvm_sys::LLVMAtomicRMWBinOp,
+    ptr: LLVMValue,
+    val: LLVMValue,
+    ordering: llvm_sys::LLVMAtomicOrdering,
+    ssid: u32,
+) -> LLVMValue {
+    assert!(llvm_get_insert_block(builder).is_some());
+    unsafe {
+        llvm_sys::core::LLVMBuildAtomicRMWSyncScope(
+            builder.inner_ref(),
+            op,
+            ptr.into(),
+            val.into(),
+            ordering,
+            ssid,
+        )
+        .into()
+    }
+}
+
+/// LLVMBuildAtomicCmpXchgSyncScope (result is the `{ T, i1 }` pair).
+pub fn llvm_build_atomic_cmpxchg(
+    builder: &LLVMBuilder,
+    ptr: LLVMValue,
+    cmp: LLVMValue,
+    new: LLVMValue,
+    success: llvm_sys::LLVMAtomicOrdering,
+    failure: llvm_sys::LLVMAtomicOrdering,
+    ssid: u32,
+) -> LLVMValue {
+    assert!(llvm_get_insert_block(builder).is_some());
+    unsafe {
+        llvm_sys::core::LLVMBuildAtomicCmpXchgSyncScope(
+            builder.inner_ref(),
+            ptr.into(),
+            cmp.into(),
+            new.into(),
+            success,
+            failure,
+            ssid,
+        )
+        .into()
+    }
+}
+
+/// LLVMBuildFenceSyncScope
+pub fn llvm_build_fence(
+    builder: &LLVMBuilder,
+    ordering: llvm_sys::LLVMAtomicOrdering,
+    ssid: u32,
+    name: &str,
+) -> LLVMValue {
+    assert!(llvm_get_insert_block(builder).is_some());
+    unsafe {
+        llvm_sys::core::LLVMBuildFenceSyncScope(
+            builder.inner_ref(),
+            ordering,
+            ssid,
+            to_c_str(name).as_ptr(),
+        )
+        .into()
+    }
+}
+
+/// LLVMSetOrdering: turn a plain load/store into an atomic one.
+pub fn llvm_set_ordering(inst: LLVMValue, ordering: llvm_sys::LLVMAtomicOrdering) {
+    unsafe { llvm_sys::core::LLVMSetOrdering(inst.into(), ordering) }
+}
+
+/// LLVMGetOrdering
+pub fn llvm_get_ordering(inst: LLVMValue) -> llvm_sys::LLVMAtomicOrdering {
+    unsafe { llvm_sys::core::LLVMGetOrdering(inst.into()) }
+}
+
+/// LLVMSetAtomicSyncScopeID
+pub fn llvm_set_atomic_sync_scope_id(inst: LLVMValue, ssid: u32) {
+    unsafe { llvm_sys::core::LLVMSetAtomicSyncScopeID(inst.into(), ssid) }
+}
+
+/// LLVMGetAtomicSyncScopeID
+pub fn llvm_get_atomic_sync_scope_id(inst: LLVMValue) -> u32 {
+    unsafe { llvm_sys::core::LLVMGetAtomicSyncScopeID(inst.into()) }
+}
+
+/// LLVMGetAtomicRMWBinOp
+pub fn llvm_get_atomic_rmw_bin_op(inst: LLVMValue) -> llvm_sys::LLVMAtomicRMWBinOp {
+    unsafe { llvm_sys::core::LLVMGetAtomicRMWBinOp(inst.into()) }
+}
+
+/// LLVMGetCmpXchgSuccessOrdering
+pub fn llvm_get_cmpxchg_success_ordering(inst: LLVMValue) -> llvm_sys::LLVMAtomicOrdering {
+    unsafe { llvm_sys::core::LLVMGetCmpXchgSuccessOrdering(inst.into()) }
+}
+
+/// LLVMGetCmpXchgFailureOrdering
+pub fn llvm_get_cmpxchg_failure_ordering(inst: LLVMValue) -> llvm_sys::LLVMAtomicOrdering {
+    unsafe { llvm_sys::core::LLVMGetCmpXchgFailureOrdering(inst.into()) }
+}
+
+/// LLVMGetInlineAsm: create an inline-asm callee value of function type `fn_ty`.
+#[allow(clippy::too_many_arguments)]
+pub fn llvm_get_inline_asm(
+    fn_ty: LLVMType,
+    asm: &str,
+    constraints: &str,
+    has_side_effects: bool,
+    is_align_stack: bool,
+    dialect: llvm_sys::LLVMInlineAsmDialect,
+    can_throw: bool,
+) -> LLVMValue {
+    unsafe {
+        llvm_sys::core::LLVMGetInlineAsm(
+            fn_ty.into(),
+            asm.as_ptr() as *const core::ffi::c_char,
+            asm.len(),
+            constraints.as_ptr() as *const core::ffi::c_char,
+            constraints.len(),
+            has_side_effects as llvm_sys::prelude::LLVMBool,
+            is_align_stack as llvm_sys::prelude::LLVMBool,
+            dialect,
+            can_throw as llvm_sys::prelude::LLVMBool,
+        )
+        .into()
+    }
+}
+
+/// LLVMGetInlineAsmAsmString
+pub fn llvm_get_inline_asm_asm_string(v: LLVMValue) -> String {
+    unsafe {
+        let mut len: usize = 0;
+        let ptr = llvm_sys::core::LLVMGetInlineAsmAsmString(v.into(), &mut len);
+        String::from_utf8_lossy(std::slice::from_raw_parts(ptr as *const u8, len)).into_owned()
+    }
+}
+
+/// LLVMGetInlineAsmConstraintString
+pub fn llvm_get_inline_asm_constraint_string(v: LLVMValue) -> String {
+    unsafe {
+        let mut len: usize = 0;
+        let ptr = llvm_sys::core::LLVMGetInlineAsmConstraintString(v.into(), &mut len);
+        String::from_utf8_lossy(std::slice::from_raw_parts(ptr as *const u8, len)).into_owned()
+    }
+}
+
+/// LLVMGetInlineAsmHasSideEffects
+pub fn llvm_get_inline_asm_has_side_effects(v: LLVMValue) -> bool {
+    unsafe { llvm_sys::core::LLVMGetInlineAsmHasSideEffects(v.into()) != 0 }
+}
+
+/// LLVMGetInlineAsmFunctionType
+pub fn llvm_get_inline_asm_function_type(v: LLVMValue) -> LLVMType {
+    unsafe { llvm_sys::core::LLVMGetInlineAsmFunctionType(v.into()).into() }
+}
