@@ -1,13 +1,13 @@
 //! A pass manager and analysis framework.
 //!
 //! This module provides:
-//! 1. [`Pass`]: a transformation or utility that runs on an operation.
-//! 2. [`PassManager`]: runs a pipeline of nested passes on each immediately
+//! 1. [`Pass`]: A transformation that runs on an operation.
+//! 2. [`PassManager`]: Runs a pipeline of nested passes on each immediately
 //!    nested operation.
-//! 3. [`GuardedPass`], [`OpPass`], and [`OpInterfacePass`]: wrappers that
+//! 3. [`GuardedPass`], [`OpPass`], and [`OpInterfacePass`]: Wrappers that
 //!    constrain where a pass is allowed to run.
-//! 4. [`Analysis`] and [`AnalysisManager`]: cached analyses with preservation
-//!    and invalidation support.
+//! 4. [`Analysis`] and [`AnalysisManager`]: Provides analyses caching with
+//!    preservation and invalidation support.
 //!
 //! # Usage
 //!

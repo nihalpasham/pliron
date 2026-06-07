@@ -1,6 +1,6 @@
 //! Control flow graph (CFG) simplification.
 //!
-//! This optimizer performs three tasks in sequence:
+//! This optimization performs three tasks in sequence:
 //!
 //! 1. It rewrites any conditional branch operation that implements [BranchOpFoldInterface] and
 //!    whose condition operand is defined as a constant to an unconditional branch.
@@ -10,7 +10,7 @@
 //!
 //! 3. It merges every pair of blocks `A` and `B`, where `B` is the sole successor of `A` and
 //!    `A` is the sole predecessor of `B`, removing `A`'s terminator and forwarding the actual
-//!    branch arguments of `A` into the formal arguments of `B`
+//!    branch arguments of `A` into the formal arguments of `B`.
 
 use rustc_hash::FxHashSet;
 
@@ -60,8 +60,12 @@ fn constant_operand_attrs(op: Ptr<Operation>, ctx: &Context) -> Vec<Option<AttrO
         .collect()
 }
 
-/// If `pred` has a single successor `succ`, `succ`'s only predecessor is `pred`, and `succ`
-/// is not the region `entry`, merge `succ` into `pred`. Returns `true` on success.
+/// Merge `succ` into `pred` when
+/// * `pred` has a single successor `succ`, and
+/// * `succ`'s only predecessor is `pred`, and
+/// * `succ` is not the region `entry`
+///
+/// Returns `true` on success.
 fn try_merge_succ(
     pred: Ptr<BasicBlock>,
     entry: Ptr<BasicBlock>,
@@ -118,7 +122,8 @@ fn try_merge_succ(
     true
 }
 
-/// Remove unreachable blocks nested inside `op`. Returns whether the IR was changed.
+/// Remove unreachable blocks nested inside `op`.
+/// Returns whether the IR was changed.
 pub fn remove_blocks_inside_op(
     op: Ptr<Operation>,
     ctx: &mut Context,
@@ -133,7 +138,8 @@ pub fn remove_blocks_inside_op(
     status
 }
 
-/// Remove unreachable blocks nested inside `block`. Returns whether the IR was changed.
+/// Remove unreachable blocks nested inside `block`.
+/// Returns whether the IR was changed.
 pub fn remove_blocks_inside_block(
     block: Ptr<BasicBlock>,
     ctx: &mut Context,
@@ -147,7 +153,8 @@ pub fn remove_blocks_inside_block(
     status
 }
 
-/// Remove unreachable blocks nested inside `region`. Returns whether the IR was changed.
+/// Remove unreachable blocks nested inside `region`.
+/// Returns whether the IR was changed.
 pub fn remove_blocks_inside_region(
     region: Ptr<Region>,
     ctx: &mut Context,
@@ -198,7 +205,8 @@ pub fn remove_blocks_inside_region(
     status
 }
 
-/// Perform merging on blocks nested inside `op`. Returns whether the IR was changed.
+/// Perform merging on blocks nested inside `op`.
+/// Returns whether the IR was changed.
 pub fn merge_inside_op(
     op: Ptr<Operation>,
     ctx: &mut Context,
@@ -228,8 +236,8 @@ pub fn merge_inside_block(
     status
 }
 
-/// Perform merging on blocks nested inside `region. Returns whether the
-/// IR was changed.
+/// Perform merging on blocks nested inside `region`.
+/// Returns whether the IR was changed.
 pub fn merge_inside_region(
     region: Ptr<Region>,
     ctx: &mut Context,
