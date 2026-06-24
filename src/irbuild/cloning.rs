@@ -187,8 +187,12 @@ pub fn clone_region_into(
 /// values that flow across a back-edge ride block arguments, which are mapped in
 /// phase one and so resolve regardless of order.
 ///
-/// Op attributes (including op result names) are copied, but block attributes
-/// (block labels, block debug info) are not: the clone blocks are fresh.
+/// Op and block attributes (op result names, block debug info, block argument
+/// names) are copied, and so is the block label. The label is a block's
+/// `given_name`; pliron derives each block's `unique_name` by suffixing a fresh
+/// per-block id, so cloning one block several times (an unrolled loop body, say)
+/// still yields distinct blocks while keeping the original's label, which makes
+/// the cloned IR easier to read.
 pub fn clone_blocks_into(
     blocks: &[Ptr<BasicBlock>],
     dest_region: Ptr<Region>,
@@ -197,11 +201,22 @@ pub fn clone_blocks_into(
 ) {
     // Phase 1: create the clone blocks and their arguments, and record them.
     for &src_block in blocks {
-        let arg_types: Vec<_> = {
+        let (arg_types, label, attrs) = {
             let block_ref = src_block.deref(ctx);
-            block_ref.arguments().map(|arg| arg.get_type(ctx)).collect()
+            let arg_types: Vec<_> = block_ref.arguments().map(|arg| arg.get_type(ctx)).collect();
+            (
+                arg_types,
+                block_ref.label.clone(),
+                block_ref.attributes.clone(),
+            )
         };
-        let new_block = BasicBlock::new(ctx, None, arg_types);
+        // Copy the label and attributes, mirroring how op attributes (result
+        // names and so on) are cloned. The label is the block's `given_name`;
+        // pliron keeps each block's `unique_name` distinct by suffixing a fresh
+        // id, so cloning the same block several times (an unrolled loop body, say)
+        // yields distinct blocks that still show which block they came from.
+        let new_block = BasicBlock::new(ctx, label, arg_types);
+        new_block.deref_mut(ctx).attributes = attrs;
 
         let old_args: Vec<Value> = src_block.deref(ctx).arguments().collect();
         let new_args: Vec<Value> = new_block.deref(ctx).arguments().collect();

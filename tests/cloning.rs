@@ -4,6 +4,7 @@ use common::{ConstantOp, ReturnOp, const_ret_in_mod};
 use pliron::{
     basic_block::BasicBlock,
     builtin::{
+        attributes::IntegerAttr,
         op_interfaces::{
             IsTerminatorInterface, OneRegionInterface, OneResultInterface,
             SingleBlockRegionInterface,
@@ -11,12 +12,15 @@ use pliron::{
         ops::{FuncOp, ModuleOp},
         types::{FunctionType, IntegerType, Signedness},
     },
+    common_traits::Named,
     context::{Context, Ptr},
     derive::pliron_op,
+    identifier::Identifier,
     irbuild::cloning::{IrMapping, clone_blocks_into, clone_operation},
     op::Op,
     operation::{Operation, verify_operation},
     result::Result,
+    utils::apint::{APInt, bw},
 };
 
 #[cfg(target_family = "wasm")]
@@ -283,6 +287,56 @@ fn clone_blocks_keeps_external_value_shared() -> Result<()> {
     assert_eq!(b2_term.deref(ctx).get_operand(0), c_val);
     // ...and the mapping has no entry for that external value.
     assert_eq!(mapper.lookup_value(c_val), None);
+
+    Ok(())
+}
+
+/// The clone carries over the source block's attributes (debug info, block
+/// argument names, ...) and its label, the same way op attributes are copied.
+/// The label is the block's `given_name`; the clone gets a fresh `unique_name`
+/// (label + a new id), so it stays a distinct block while still showing where it
+/// came from.
+#[test]
+#[cfg_attr(target_family = "wasm", wasm_bindgen_test)]
+fn clone_blocks_copies_block_label_and_attributes() -> Result<()> {
+    let ctx = &mut Context::new();
+    let i64_ty = IntegerType::get(ctx, 64, Signedness::Signed);
+
+    let module = ModuleOp::new(ctx, "m".try_into().unwrap());
+    let func_ty = FunctionType::get(ctx, vec![], vec![i64_ty.into()]);
+    let func = FuncOp::new(ctx, "foo".try_into().unwrap(), func_ty);
+    module.append_operation(ctx, func.get_operation(), 0);
+    let region = func.get_region(ctx);
+
+    // Give the source block a label and an attribute (a stand-in for block
+    // debug info).
+    let src = func.get_entry_block(ctx);
+    let label: Identifier = "myblock".try_into().unwrap();
+    src.deref_mut(ctx).set_label(ctx, Some(label.clone()));
+    let key: Identifier = "test_block_attr".try_into().unwrap();
+    src.deref_mut(ctx).attributes.set(
+        key.clone(),
+        IntegerAttr::new(i64_ty, APInt::from_u64(42, bw(64))),
+    );
+
+    let mut mapper = IrMapping::new();
+    clone_blocks_into(&[src], region, ctx, &mut mapper);
+    let clone = mapper.lookup_block(src).expect("block should be mapped");
+
+    let clone_ref = clone.deref(ctx);
+    // The clone carries the same attribute.
+    let copied = clone_ref
+        .attributes
+        .get::<IntegerAttr>(&key)
+        .expect("block attribute should be copied to the clone");
+    assert_eq!(copied.value().to_u64(), 42);
+    // ... and the same label (given_name), but a distinct unique_name.
+    assert_eq!(clone_ref.given_name(ctx), Some(label));
+    assert_ne!(
+        clone_ref.unique_name(ctx),
+        src.deref(ctx).unique_name(ctx),
+        "the clone must be a distinct block with its own unique_name"
+    );
 
     Ok(())
 }
